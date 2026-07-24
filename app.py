@@ -355,6 +355,7 @@ def create_playfile():
             last_play_lines = ""
 
         ext_ini = f"""type=playfile
+title=שלוחת השמעת קבצים נבנה באמצעות מגדיר פון 
 after_play=return
 {say_length_value}
 {beep_line}
