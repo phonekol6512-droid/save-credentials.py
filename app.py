@@ -8,24 +8,32 @@ YEMOT_API_URL = "https://www.call2all.co.il/ym/api/"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# ---------- זיכרון פרטי משתמשים לפי CLI ----------
+# ---------- זיכרון פרטי משתמשים ----------
+# מפתח: cli (מספר טלפון) או 'default' (ללא cli)
+# ערך: {'system': str, 'password': str}
 user_sessions = {}
 
 def get_user_credentials(cli):
-    """מחזיר פרטי מערכת (system, password) לפי מספר טלפון"""
+    """
+    מחזיר פרטי מערכת (system, password) לפי cli.
+    אם cli לא קיים או לא נמצא, מחזיר את פרטי ברירת המחדל (אם קיימים).
+    """
     if cli and cli in user_sessions:
+        logging.info(f"נמצאו פרטים ל-CLI {cli}")
         return user_sessions[cli].get('system'), user_sessions[cli].get('password')
+    if 'default' in user_sessions:
+        logging.info("נמצאו פרטי ברירת מחדל")
+        return user_sessions['default'].get('system'), user_sessions['default'].get('password')
+    logging.info("לא נמצאו פרטים")
     return None, None
 
 def save_user_credentials(cli, system, password):
-    """שומר פרטי מערכת לפי מספר טלפון"""
-    if cli:
-        user_sessions[cli] = {'system': system, 'password': password}
-        logging.info(f"פרטים נשמרו עבור CLI {cli}")
-    else:
-        # fallback – שומר גלובלי (כל המשתמשים ישתמשו באותו פרט)
-        user_sessions['default'] = {'system': system, 'password': password}
-        logging.info("פרטים נשמרו ברירת מחדל (ללא CLI)")
+    """
+    שומר פרטי מערכת. אם cli קיים – שומר תחתיו, אחרת – שומר כ-default.
+    """
+    key = cli if cli else 'default'
+    user_sessions[key] = {'system': system, 'password': password}
+    logging.info(f"פרטים נשמרו תחת '{key}' (system={system})")
 
 def ym_response(content: str):
     res = make_response(content)
@@ -45,30 +53,26 @@ def save_credentials():
     system = request.values.get('system')
     password = request.values.get('password')
 
-    # שלב 1: שאלת מספר מערכת
+    logging.info(f"/save-credentials: cli={cli}, system={system}, password={'*' if password else None}")
+
     if not system:
         return ym_read("system", "t-אנא הקש את מספר המערכת ובסיומה סולמית", 10)
-
-    # שלב 2: שאלת סיסמה
     if not password:
         return ym_read("password", "t-אנא הקש את סיסמת המערכת ובסיומה סולמית", 10)
 
-    # שלב 3: שמירה בזיכרון
     save_user_credentials(cli, system.strip(), password.strip())
 
-    # הודעה למשתמש
-    if cli:
-        msg = f"t-הפרטים נשמרו בהצלחה עבור מספר {cli}"
-    else:
-        msg = "t-הפרטים נשמרו בהצלחה (ברירת מחדל)"
+    msg = f"t-הפרטים נשמרו בהצלחה{(' למספר ' + cli) if cli else ' (ברירת מחדל)'}"
     return ym_say_and_go_back(msg)
 
 # ---------- שלוחה 2: יצירת שלוחת השמעה ----------
 @app.route('/create-playfile', methods=['GET', 'POST'])
 def create_playfile():
     cli = request.values.get('cli')
+    logging.info(f"/create-playfile: cli={cli}")
+    logging.info(f"Received params: {list(request.values.keys())}")
 
-    # ---------- ניסיון לשלוף פרטים מהזיכרון ----------
+    # ---------- שליפת system/password ----------
     system, password = get_user_credentials(cli)
 
     # אם אין פרטים – שואל
@@ -82,9 +86,8 @@ def create_playfile():
         if not password:
             return ym_read("password", "t-אנא הקש את סיסמת המערכת ובסיומה סולמית", 10)
 
-    # שומר פרטים אם הגיעו מה-read (למקרה שזה המשתמש הראשון)
-    if cli:
-        save_user_credentials(cli, system.strip(), password.strip())
+    # שומר פרטים (בין אם הגיעו מה-read או מה-session)
+    save_user_credentials(cli, system.strip(), password.strip())
 
     # ---------- שאר השאלות ----------
     extension = request.values.get('extension')
@@ -103,28 +106,20 @@ def create_playfile():
 
     if say_length is None:
         return ym_read("say_length", "t-אורך הקובץ? 1-כן תמיד 2-רק מעל 5 דקות 0-לא", 1)
-
     if play_beep is None:
         return ym_read("play_beep", "t-להסיר ביפ? 1-כן 0-לא", 1)
-
     if play_order is None:
         return ym_read("play_order", "t-סדר: 1-ישן לחדש 0-ברירת מחדל", 1)
-
     if say_files_amount is None:
         return ym_read("say_files_amount", "t-להשמיע כמות? 1-כן 0-לא", 1)
-
     if source_extension is None:
         return ym_read("source_extension", "t-משלוחה אחרת? 1-כן 0-לא", 1)
-
     if source_extension == "1" and not source_extension_path:
         return ym_read("source_extension_path", "t-הקש את השלוחה המקור (לפנימית הקש כוכבית)", 10)
-
     if end_action is None:
         return ym_read("end_action", "t-לעבור לשלוחה בסיום? 1-כן 0-לא", 1)
-
     if end_action == "1" and not end_extension:
         return ym_read("end_extension", "t-הקש את שלוחת היעד (לפנימית הקש כוכבית)", 10)
-
     if last_play_action is None:
         return ym_read("last_play_action", "t-שמירת מיקום: 1-תפריט 2-אוטומטי 0-לא", 1)
 
@@ -135,6 +130,7 @@ def create_playfile():
             return ym_say_and_go_back("t-שגיאה: השלוחה ריקה")
 
         token = f"{system.strip()}:{password.strip()}"
+        logging.info(f"Using token: {token}")
 
         say_length_value = "say_length=yes" if say_length == "1" else "playfile_say_length_if=5" if say_length == "2" else "say_length=no"
         beep_line = "play_beep=no" if play_beep == "1" else ""
@@ -172,6 +168,8 @@ after_play=return
 """
         ext_ini = "\n".join([line for line in ext_ini.splitlines() if line.strip()])
 
+        logging.info(f"Creating playfile extension {clean_ext}")
+
         r1 = requests.get(
             f"{YEMOT_API_URL}UpdateExtension",
             params={
@@ -203,18 +201,19 @@ after_play=return
             return ym_say_and_go_back("t-השלוחה נוצרה אך התפריט לא נטען")
 
     except Exception as e:
-        logging.exception("שגיאה")
+        logging.exception("שגיאה ב-create-playfile")
         return ym_say_and_go_back("t-שגיאה טכנית")
 
 # ---------- שלוחה 3: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
 def create_menu():
     cli = request.values.get('cli')
+    logging.info(f"/create-menu: cli={cli}")
+    logging.info(f"Received params: {list(request.values.keys())}")
 
-    # ---------- ניסיון לשלוף פרטים מהזיכרון ----------
+    # ---------- שליפת system/password ----------
     system, password = get_user_credentials(cli)
 
-    # אם אין פרטים – שואל
     if not system:
         system = request.values.get('system')
         if not system:
@@ -225,9 +224,7 @@ def create_menu():
         if not password:
             return ym_read("password", "t-אנא הקש את סיסמת המערכת ובסיומה סולמית", 10)
 
-    # שומר פרטים אם הגיעו מה-read
-    if cli:
-        save_user_credentials(cli, system.strip(), password.strip())
+    save_user_credentials(cli, system.strip(), password.strip())
 
     # ---------- שאר השאלות ----------
     extension = request.values.get('extension')
@@ -282,6 +279,8 @@ def create_menu():
             return ym_say_and_go_back("t-שגיאה: השלוחה ריקה")
 
         token = f"{system.strip()}:{password.strip()}"
+        logging.info(f"Using token: {token}")
+
         digits = int(num_digits) if (num_digits and num_digits.isdigit()) else 1
 
         voice_map = {
@@ -317,6 +316,8 @@ rate={selected_speed}
 {conf_lines}
 """
 
+        logging.info(f"Creating menu extension {clean_ext}")
+
         r1 = requests.get(
             f"{YEMOT_API_URL}UpdateExtension",
             params={
@@ -349,8 +350,13 @@ rate={selected_speed}
             return ym_say_and_go_back("t-השלוחה נוצרה אך התפריט לא נטען")
 
     except Exception as e:
-        logging.exception("שגיאה")
+        logging.exception("שגיאה ב-create-menu")
         return ym_say_and_go_back("t-שגיאה טכנית")
+
+# ---------- נתיב עזר לבדיקה ----------
+@app.route('/debug-sessions', methods=['GET'])
+def debug_sessions():
+    return dict(user_sessions)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
