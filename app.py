@@ -64,7 +64,7 @@ def save_credentials():
     password = request.values.get('password')
 
     if not system:
-        return ym_read("system", "t-אנא הקש את מספר המערכת ובסיומה סולמית", 10)
+        return ym_read("system", "t-ברוכים הבאים למגדיר פון, קו ההגדרות המתקדמות מבית פון קול. אנא הקישו את מספר המערכת בסיום הקישו סולמית", 10)
     if not password:
         return ym_read("password", "t-אנא הקש את סיסמת המערכת ובסיומה סולמית", 10)
 
