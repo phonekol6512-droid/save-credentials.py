@@ -74,7 +74,7 @@ def save_credentials():
         msg = f"t-הפרטים נשמרו בהצלחה למספר {cli}"
     else:
         msg = "t-הפרטים נשמרו בהצלחה (ברירת מחדל)"
-    return ym_say_and_go_goto = 1 (msg)
+    return ym_say_and_go_back (msg)
 
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
