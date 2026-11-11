@@ -112,7 +112,7 @@ def manage_credentials():
 
     # אם יש מערכת שמורה והמשתמש עדיין לא בחר פעולה
     if saved_system and saved_password and manage_action is None:
-        return ym_read("manage_action", f"t-מערכת {saved_system} שמורה להחלפה הקש 1 למחיקה הקש 2 ליציאה הקש 0", 1)
+        return ym_read("manage_action", f"t-המערכת {saved_system} שמורה להחלפת המערכת והסיסמה  הקש 1 למחיקת מספר המערכת והסיסמה הקש 2 ליציאה הקש 0", 1)
 
     # אם בחר למחוק
     if manage_action == "2":
@@ -121,11 +121,11 @@ def manage_credentials():
 
     # אם בחר לצאת
     if manage_action == "0":
-        return ym_say_and_go_back("t-ללא שינוי")
+        return ym_say_and_go_back("t-הנך מועבר לתפריט הקודם")
 
     # אם בחר להחליף (manage_action == "1") או שאין לו מערכת שמורה
     if not user_system:
-        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+        return ym_read("user_system", "t-הגדרת מערכת קבועה שים לב תמיד תוכל למחוק ולשנות את המערכת הקבועה אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
