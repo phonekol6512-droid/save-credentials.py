@@ -27,19 +27,14 @@ def save_credentials_to_file(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def get_user_credentials(cli):
-    """מחזיר פרטים לפי cli, ואם אין – מנסה 'default'"""
     data = load_credentials()
     if cli and cli in data:
-        logging.info(f"נמצאו פרטים עבור CLI {cli}")
         return data[cli].get('system'), data[cli].get('password')
     if 'default' in data:
-        logging.info("נמצאו פרטים תחת 'default' (אין CLI)")
         return data['default'].get('system'), data['default'].get('password')
-    logging.info("לא נמצאו פרטים")
     return None, None
 
 def save_user_credentials(cli, system, password):
-    """שומר תמיד – תחת cli אם קיים, אחרת תחת 'default'"""
     data = load_credentials()
     key = cli if cli else 'default'
     data[key] = {'system': system, 'password': password}
@@ -68,11 +63,12 @@ def ym_say_and_go_back(text: str):
 # ---------- שלוחה 1: שמירת פרטי מערכת ----------
 @app.route('/save-credentials', methods=['GET', 'POST'])
 def save_credentials():
-    cli = request.values.get('cli')
+    # תיקון: מספר הטלפון מגיע ב-ApiPhone
+    cli = request.values.get('ApiPhone')
     system = request.values.get('system')
     password = request.values.get('password')
 
-    logging.info(f"/save-credentials: cli={cli}, params={list(request.values.keys())}")
+    logging.info(f"/save-credentials: cli={cli}, system={system}")
 
     if not system:
         return ym_read("system", "t-ברוכים הבאים למגדיר פון, קו ההגדרות המתקדמות מבית פון קול אנא הקישו את מספר המערכת בסיום הקישו סולמית", 10)
@@ -90,7 +86,8 @@ def save_credentials():
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
 def create_menu():
-    cli = request.values.get('cli')
+    # תיקון: מספר הטלפון מגיע ב-ApiPhone
+    cli = request.values.get('ApiPhone')
     system = request.values.get('system')
     password = request.values.get('password')
     use_saved = request.values.get('use_saved')
@@ -118,10 +115,12 @@ def create_menu():
     if use_saved == "2":
         delete_user_credentials(cli)
         saved_system, saved_password = None, None
+        logging.info("המשתמש בחר להחליף מערכת")
 
     if saved_system and saved_password and use_saved == "1":
         system = saved_system
         password = saved_password
+        logging.info(f"משתמש בחר להשתמש במערכת השמורה {system}")
 
     # ---------- שלב 1: מספר מערכת ----------
     if not system:
@@ -131,7 +130,7 @@ def create_menu():
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה (תמיד!) ----------
+    # ---------- שמירה (אם הגיעו מהמשתמש) ----------
     if system in request.values and password in request.values:
         save_user_credentials(cli, system.strip(), password.strip())
 
@@ -244,7 +243,8 @@ rate={selected_speed}
 # ---------- שלוחה 3: יצירת שלוחת השמעה ----------
 @app.route('/create-playfile', methods=['GET', 'POST'])
 def create_playfile():
-    cli = request.values.get('cli')
+    # תיקון: מספר הטלפון מגיע ב-ApiPhone
+    cli = request.values.get('ApiPhone')
     system = request.values.get('system')
     password = request.values.get('password')
     use_saved = request.values.get('use_saved')
@@ -270,10 +270,12 @@ def create_playfile():
     if use_saved == "2":
         delete_user_credentials(cli)
         saved_system, saved_password = None, None
+        logging.info("המשתמש בחר להחליף מערכת")
 
     if saved_system and saved_password and use_saved == "1":
         system = saved_system
         password = saved_password
+        logging.info(f"משתמש בחר להשתמש במערכת השמורה {system}")
 
     # --- שלב 1: system ---
     if not system:
@@ -283,7 +285,7 @@ def create_playfile():
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה (תמיד!) ----------
+    # ---------- שמירה (אם הגיעו מהמשתמש) ----------
     if system in request.values and password in request.values:
         save_user_credentials(cli, system.strip(), password.strip())
 
@@ -395,6 +397,11 @@ after_play=return
     except Exception as e:
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
+
+# ---------- נתיב בדיקה ----------
+@app.route('/debug-credentials', methods=['GET'])
+def debug_credentials():
+    return dict(load_credentials())
 
 # ---------- הרצת השרת ----------
 if __name__ == '__main__':
