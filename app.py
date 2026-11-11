@@ -1,4 +1,3 @@
-
 import re
 import json
 import os
@@ -11,40 +10,50 @@ YEMOT_API_URL = "https://www.call2all.co.il/ym/api/"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# ---------- קובץ לשמירת פרטי משתמשים ----------
 CREDENTIALS_FILE = "credentials.json"
 
 def load_credentials():
-    """טוען את כל הפרטים מקובץ JSON"""
     if os.path.exists(CREDENTIALS_FILE):
         try:
             with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except:
+        except Exception as e:
+            logging.error(f"שגיאה בטעינת credentials: {e}")
             return {}
     return {}
 
 def save_credentials_to_file(data):
-    """שומר את כל הפרטים לקובץ JSON"""
     with open(CREDENTIALS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def get_user_credentials(cli):
-    """מחזיר פרטי מערכת (system, password) לפי cli, או None"""
+    """מחזיר פרטים לפי cli, ואם אין – מנסה 'default'"""
     data = load_credentials()
     if cli and cli in data:
+        logging.info(f"נמצאו פרטים עבור CLI {cli}")
         return data[cli].get('system'), data[cli].get('password')
+    if 'default' in data:
+        logging.info("נמצאו פרטים תחת 'default' (אין CLI)")
+        return data['default'].get('system'), data['default'].get('password')
+    logging.info("לא נמצאו פרטים")
     return None, None
 
 def save_user_credentials(cli, system, password):
-    """שומר פרטי מערכת לפי cli (או כ-default אם אין cli)"""
+    """שומר תמיד – תחת cli אם קיים, אחרת תחת 'default'"""
     data = load_credentials()
     key = cli if cli else 'default'
     data[key] = {'system': system, 'password': password}
     save_credentials_to_file(data)
     logging.info(f"פרטים נשמרו תחת '{key}'")
 
-# ---------- פונקציות בסיסיות ----------
+def delete_user_credentials(cli):
+    data = load_credentials()
+    key = cli if cli else 'default'
+    if key in data:
+        del data[key]
+        save_credentials_to_file(data)
+        logging.info(f"פרטים נמחקו עבור '{key}'")
+
 def ym_response(content: str):
     res = make_response(content)
     res.headers["Content-Type"] = "text/plain; charset=utf-8"
@@ -54,7 +63,6 @@ def ym_read(var_name: str, prompt: str, max_digits=1):
     return ym_response(f"read={prompt}={var_name},{max_digits},12,1,Digits")
 
 def ym_say_and_go_back(text: str):
-    """משמיע הודעה וחוזר לתפריט הקודם (ללא לופ)"""
     return ym_response(f"id_list_message={text}")
 
 # ---------- שלוחה 1: שמירת פרטי מערכת ----------
@@ -63,6 +71,8 @@ def save_credentials():
     cli = request.values.get('cli')
     system = request.values.get('system')
     password = request.values.get('password')
+
+    logging.info(f"/save-credentials: cli={cli}, params={list(request.values.keys())}")
 
     if not system:
         return ym_read("system", "t-ברוכים הבאים למגדיר פון, קו ההגדרות המתקדמות מבית פון קול אנא הקישו את מספר המערכת בסיום הקישו סולמית", 10)
@@ -75,7 +85,7 @@ def save_credentials():
         msg = f"t-הפרטים נשמרו בהצלחה למספר {cli}"
     else:
         msg = "t-הפרטים נשמרו בהצלחה (ברירת מחדל)"
-    return ym_say_and_go_back (msg)
+    return ym_say_and_go_back(msg)
 
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
@@ -83,6 +93,7 @@ def create_menu():
     cli = request.values.get('cli')
     system = request.values.get('system')
     password = request.values.get('password')
+    use_saved = request.values.get('use_saved')
     extension = request.values.get('extension')
     change_default = request.values.get('change_default')
     num_digits = request.values.get('num_digits')
@@ -96,13 +107,21 @@ def create_menu():
     hash_setting = request.values.get('hash_setting')
     star_setting = request.values.get('star_setting')
 
-    # ---------- שלב 0: שליפת פרטים מהזיכרון (אם קיימים) ----------
-    if not system or not password:
-        saved_system, saved_password = get_user_credentials(cli)
-        if saved_system and saved_password:
-            system = saved_system
-            password = saved_password
-            logging.info(f"נשלפו פרטים שמורים ל-CLI {cli}")
+    logging.info(f"/create-menu: cli={cli}, params={list(request.values.keys())}")
+
+    # ---------- שלב 0: בדיקת זיכרון ----------
+    saved_system, saved_password = get_user_credentials(cli)
+
+    if saved_system and saved_password and use_saved is None and not system:
+        return ym_read("use_saved", f"t-מערכת {saved_system} שמורה. להמשך הקש 1, להחלפת מערכת הקש 2", 1)
+
+    if use_saved == "2":
+        delete_user_credentials(cli)
+        saved_system, saved_password = None, None
+
+    if saved_system and saved_password and use_saved == "1":
+        system = saved_system
+        password = saved_password
 
     # ---------- שלב 1: מספר מערכת ----------
     if not system:
@@ -112,8 +131,8 @@ def create_menu():
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה (אם הגיעו מה-read) ----------
-    if cli:
+    # ---------- שמירה (תמיד!) ----------
+    if system in request.values and password in request.values:
         save_user_credentials(cli, system.strip(), password.strip())
 
     # ---------- שלב 3: מספר שלוחה ----------
@@ -165,18 +184,10 @@ def create_menu():
         token = f"{system.strip()}:{password.strip()}"
         digits = int(num_digits) if (num_digits and num_digits.isdigit()) else 1
 
-        voice_map = {
-            "1": "Elik_2100",
-            "2": "Jacob",
-            "3": "Sivan",
-            "4": "Osnat"
-        }
+        voice_map = {"1": "Elik_2100", "2": "Jacob", "3": "Sivan", "4": "Osnat"}
         selected_voice = voice_map.get(voice_choice, "he-il-1") if change_voice == "1" else "he-il-1"
 
-        speed_map = {
-            "1": "-2", "2": "2", "3": "-4", "4": "4",
-            "5": "-7", "6": "7", "7": "-10", "8": "10"
-        }
+        speed_map = {"1": "-2", "2": "2", "3": "-4", "4": "4", "5": "-7", "6": "7", "7": "-10", "8": "10"}
         selected_speed = speed_map.get(speed_choice, "0") if change_speed == "1" else "0"
 
         omer_line = "omer_today_play=yes" if omer_choice == "1" else ""
@@ -199,12 +210,7 @@ rate={selected_speed}
 
         r1 = requests.get(
             f"{YEMOT_API_URL}UpdateExtension",
-            params={
-                "token": token,
-                "path": f"ivr2:{clean_ext}",
-                "type": "menu",
-                "max_digits": digits
-            },
+            params={"token": token, "path": f"ivr2:{clean_ext}", "type": "menu", "max_digits": digits},
             timeout=15
         )
         logging.info(f"UpdateExtension: {r1.status_code} - {r1.text}")
@@ -214,26 +220,13 @@ rate={selected_speed}
 
         r2 = requests.post(
             f"{YEMOT_API_URL}UploadTextFile",
-            params={
-                "token": token,
-                "what": f"ivr2:/{clean_ext}/ext.ini",
-                "contents": ext_ini
-            },
+            params={"token": token, "what": f"ivr2:/{clean_ext}/ext.ini", "contents": ext_ini},
             timeout=15
         )
         logging.info(f"UploadTextFile: {r2.status_code} - {r2.text}")
 
         if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
-            speed_labels = {
-                "-2": "קצת איטי",
-                "2": "קצת מהיר",
-                "-4": "איטי",
-                "4": "מהיר",
-                "-7": "איטי מאוד",
-                "7": "מהיר מאוד",
-                "-10": "איטי במיוחד",
-                "10": "מהיר במיוחד"
-            }
+            speed_labels = {"-2": "קצת איטי", "2": "קצת מהיר", "-4": "איטי", "4": "מהיר", "-7": "איטי מאוד", "7": "מהיר מאוד", "-10": "איטי במיוחד", "10": "מהיר במיוחד"}
             speed_label = speed_labels.get(selected_speed, "רגיל")
             omer_status = "פעיל" if omer_choice == "1" else "כבוי"
             conf_status = f"פעיל (שלוחה {conf_extension})" if conf_bridge == "1" else "כבוי"
@@ -254,6 +247,7 @@ def create_playfile():
     cli = request.values.get('cli')
     system = request.values.get('system')
     password = request.values.get('password')
+    use_saved = request.values.get('use_saved')
     extension = request.values.get('extension')
     say_length = request.values.get('say_length')
     play_beep = request.values.get('play_beep')
@@ -265,13 +259,21 @@ def create_playfile():
     end_extension = request.values.get('end_extension')
     last_play_action = request.values.get('last_play_action')
 
-    # ---------- שלב 0: שליפת פרטים מהזיכרון ----------
-    if not system or not password:
-        saved_system, saved_password = get_user_credentials(cli)
-        if saved_system and saved_password:
-            system = saved_system
-            password = saved_password
-            logging.info(f"נשלפו פרטים שמורים ל-CLI {cli}")
+    logging.info(f"/create-playfile: cli={cli}, params={list(request.values.keys())}")
+
+    # ---------- שלב 0: בדיקת זיכרון ----------
+    saved_system, saved_password = get_user_credentials(cli)
+
+    if saved_system and saved_password and use_saved is None and not system:
+        return ym_read("use_saved", f"t-מערכת {saved_system} שמורה. להמשך הקש 1, להחלפת מערכת הקש 2", 1)
+
+    if use_saved == "2":
+        delete_user_credentials(cli)
+        saved_system, saved_password = None, None
+
+    if saved_system and saved_password and use_saved == "1":
+        system = saved_system
+        password = saved_password
 
     # --- שלב 1: system ---
     if not system:
@@ -281,8 +283,8 @@ def create_playfile():
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה ----------
-    if cli:
+    # ---------- שמירה (תמיד!) ----------
+    if system in request.values and password in request.values:
         save_user_credentials(cli, system.strip(), password.strip())
 
     # --- שלב 3: extension ---
@@ -370,11 +372,7 @@ after_play=return
 
         r1 = requests.get(
             f"{YEMOT_API_URL}UpdateExtension",
-            params={
-                "token": token,
-                "path": f"ivr2:{clean_ext}",
-                "type": "playfile"
-            },
+            params={"token": token, "path": f"ivr2:{clean_ext}", "type": "playfile"},
             timeout=15
         )
         logging.info(f"UpdateExtension: {r1.status_code} - {r1.text}")
@@ -384,11 +382,7 @@ after_play=return
 
         r2 = requests.post(
             f"{YEMOT_API_URL}UploadTextFile",
-            params={
-                "token": token,
-                "what": f"ivr2:/{clean_ext}/ext.ini",
-                "contents": ext_ini
-            },
+            params={"token": token, "what": f"ivr2:/{clean_ext}/ext.ini", "contents": ext_ini},
             timeout=15
         )
         logging.info(f"UploadTextFile: {r2.status_code} - {r2.text}")
