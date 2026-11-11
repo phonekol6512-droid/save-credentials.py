@@ -100,50 +100,41 @@ def ym_say_and_go_back(text: str):
 def debug_credentials():
     return dict(load_credentials())
 
-@app.route('/test-yemot-file', methods=['GET'])
-def test_yemot_file():
-    token = os.environ.get('MASTER_TOKEN')
-    if not token:
-        return "MASTER_TOKEN חסר!"
-    r_up = requests.post(
-        f"{YEMOT_API_URL}UploadTextFile",
-        params={"token": token, "what": "ivr2:1/test.json", "contents": '{"test":"hello"}'},
-        timeout=10
-    )
-    r_get = requests.get(
-        f"{YEMOT_API_URL}GetTextFile",
-        params={"token": token, "what": "ivr2:1/test.json"},
-        timeout=10
-    )
-    return {
-        "upload_status": r_up.status_code,
-        "upload_response": r_up.text,
-        "get_status": r_get.status_code,
-        "get_response": r_get.text
-    }
-
-# ---------- שלוחה 1: שמירת פרטי מערכת ----------
-@app.route('/save-credentials', methods=['GET', 'POST'])
-def save_credentials():
+# ---------- שלוחה 1: ניהול מערכת (החלפה / מחיקה / הגדרה ראשונית) ----------
+@app.route('/manage-credentials', methods=['GET', 'POST'])
+def manage_credentials():
     cli = request.values.get('ApiPhone')
     user_system = request.values.get('user_system')
     password = request.values.get('password')
+    manage_action = request.values.get('manage_action')
+
+    saved_system, saved_password = get_user_credentials(cli)
+
+    # אם יש מערכת שמורה והמשתמש עדיין לא בחר פעולה
+    if saved_system and saved_password and manage_action is None:
+        return ym_read("manage_action", f"t-מערכת {saved_system} שמורה להחלפה הקש 1 למחיקה הקש 2 ליציאה הקש 0", 1)
+
+    # אם בחר למחוק
+    if manage_action == "2":
+        delete_user_credentials(cli)
+        return ym_say_and_go_back("t-המערכת נמחקה בהצלחה")
+
+    # אם בחר לצאת
+    if manage_action == "0":
+        return ym_say_and_go_back("t-ללא שינוי")
+
+    # אם בחר להחליף (manage_action == "1") או שאין לו מערכת שמורה
+    if not user_system:
+        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+    if not password:
+        return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
     if 'user_system' in request.values and user_system:
         save_field(cli, 'system', user_system.strip())
     if 'password' in request.values and password:
         save_field(cli, 'password', password.strip())
 
-    if not user_system:
-        return ym_read("user_system", "t-ברוכים הבאים למגדיר פון קו ההגדרות המתקדמות מבית פון קול אנא הקישו את מספר המערכת בסיום הקישו סולמית", 10)
-    if not password:
-        return ym_read("password", "t-אנא הקש את סיסמת המערכת ובסיומה סולמית", 10)
-
-    if cli:
-        msg = f"t-הפרטים נשמרו בהצלחה למספר {cli}"
-    else:
-        msg = "t-הפרטים נשמרו בהצלחה"
-    return ym_say_and_go_back(msg)
+    return ym_say_and_go_back("t-הפרטים נשמרו בהצלחה")
 
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
@@ -151,7 +142,22 @@ def create_menu():
     cli = request.values.get('ApiPhone')
     user_system = request.values.get('user_system')
     password = request.values.get('password')
-    use_saved = request.values.get('use_saved')
+    
+    # שליפת המערכת השמורה (אם קיימת)
+    saved_system, saved_password = get_user_credentials(cli)
+
+    if saved_system and saved_password:
+        user_system = saved_system
+        password = saved_password
+        logging.info(f"משתמש אוטומטית במערכת השמורה {user_system}")
+    else:
+        # אם אין מערכת שמורה, פשוט שואל ולא שומר כלום!
+        if not user_system:
+            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+        if not password:
+            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
+
+    # שאר הפרמטרים
     extension = request.values.get('extension')
     change_default = request.values.get('change_default')
     num_digits = request.values.get('num_digits')
@@ -164,33 +170,6 @@ def create_menu():
     conf_extension = request.values.get('conf_extension')
     hash_setting = request.values.get('hash_setting')
     star_setting = request.values.get('star_setting')
-
-    if 'user_system' in request.values and user_system:
-        save_field(cli, 'system', user_system.strip())
-    if 'password' in request.values and password:
-        save_field(cli, 'password', password.strip())
-
-    saved_system, saved_password = get_user_credentials(cli)
-
-    # תיקון: הוסר הפסיק מההודעה
-    if saved_system and saved_password and use_saved is None and not user_system:
-        logging.info(f"נמצאו פרטים שמורים: {saved_system}")
-        return ym_read("use_saved", f"t-מערכת {saved_system} שמורה להמשך הקש 1 להחלפת מערכת הקש 2", 1)
-
-    if use_saved == "2":
-        delete_user_credentials(cli)
-        saved_system, saved_password = None, None
-        logging.info("המשתמש בחר להחליף מערכת")
-
-    if saved_system and saved_password and use_saved == "1":
-        user_system = saved_system
-        password = saved_password
-        logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
-
-    if not user_system:
-        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
-    if not password:
-        return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
@@ -295,7 +274,22 @@ def create_playfile():
     cli = request.values.get('ApiPhone')
     user_system = request.values.get('user_system')
     password = request.values.get('password')
-    use_saved = request.values.get('use_saved')
+    
+    # שליפת המערכת השמורה (אם קיימת)
+    saved_system, saved_password = get_user_credentials(cli)
+
+    if saved_system and saved_password:
+        user_system = saved_system
+        password = saved_password
+        logging.info(f"משתמש אוטומטית במערכת השמורה {user_system}")
+    else:
+        # אם אין מערכת שמורה, פשוט שואל ולא שומר כלום!
+        if not user_system:
+            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+        if not password:
+            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
+
+    # שאר הפרמטרים
     extension = request.values.get('extension')
     say_length = request.values.get('say_length')
     play_beep = request.values.get('play_beep')
@@ -306,34 +300,6 @@ def create_playfile():
     end_action = request.values.get('end_action')
     end_extension = request.values.get('end_extension')
     last_play_action = request.values.get('last_play_action')
-
-    if 'user_system' in request.values and user_system:
-        save_field(cli, 'system', user_system.strip())
-    if 'password' in request.values and password:
-        save_field(cli, 'password', password.strip())
-
-    saved_system, saved_password = get_user_credentials(cli)
-
-    # תיקון: הוסר הפסיק מההודעה
-    if saved_system and saved_password and use_saved is None and not user_system:
-        logging.info(f"נמצאו פרטים שמורים: {saved_system}")
-        return ym_read("use_saved", f"t-מערכת {saved_system} שמורה להמשך הקש 1 להחלפת מערכת הקש 2", 1)
-
-    if use_saved == "2":
-        delete_user_credentials(cli)
-        saved_system, saved_password = None, None
-        logging.info("המשתמש בחר להחליף מערכת")
-
-    if saved_system and saved_password and use_saved == "1":
-        user_system = saved_system
-        password = saved_password
-        logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
-
-    if not user_system:
-        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
-
-    if not password:
-        return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה שברצונכם להגדיר לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה בסיום הקישו סולמית", 10)
