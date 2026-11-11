@@ -10,7 +10,8 @@ YEMOT_API_URL = "https://www.call2all.co.il/ym/api/"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-CREDENTIALS_PATH = "ivr2:/credentials.json"
+# ---------- שמירה בימות (לא ב-Render!) ----------
+CREDENTIALS_PATH = "ivr2:1/credentials.json"
 
 def load_credentials():
     token = os.environ.get('MASTER_TOKEN')
@@ -59,16 +60,17 @@ def get_user_credentials(cli):
     data = load_credentials()
     if cli and cli in data:
         return data[cli].get('system'), data[cli].get('password')
-    if 'default' in data:
-        return data['default'].get('system'), data['default'].get('password')
     return None, None
 
-def save_user_credentials(cli, system, password):
+def save_field(cli, field, value):
+    """שומר שדה בודד (system או password) ברגע שהוא מגיע"""
     data = load_credentials()
     key = cli if cli else 'default'
-    data[key] = {'system': system, 'password': password}
+    if key not in data:
+        data[key] = {}
+    data[key][field] = value
     save_credentials_to_file(data)
-    logging.info(f"פרטים נשמרו תחת '{key}' בימות")
+    logging.info(f"נשמר {field} תחת '{key}'")
 
 def delete_user_credentials(cli):
     data = load_credentials()
@@ -76,8 +78,9 @@ def delete_user_credentials(cli):
     if key in data:
         del data[key]
         save_credentials_to_file(data)
-        logging.info(f"פרטים נמחקו עבור '{key}' בימות")
+        logging.info(f"פרטים נמחקו עבור '{key}'")
 
+# ---------- פונקציות בסיסיות ----------
 def ym_response(content: str):
     res = make_response(content)
     res.headers["Content-Type"] = "text/plain; charset=utf-8"
@@ -89,6 +92,34 @@ def ym_read(var_name: str, prompt: str, max_digits=1):
 def ym_say_and_go_back(text: str):
     return ym_response(f"id_list_message={text}")
 
+# ---------- נתיב בדיקה: האם השמירה בימות עובדת? ----------
+@app.route('/test-yemot-file', methods=['GET'])
+def test_yemot_file():
+    token = os.environ.get('MASTER_TOKEN')
+    if not token:
+        return "MASTER_TOKEN חסר!"
+    r_up = requests.post(
+        f"{YEMOT_API_URL}UploadTextFile",
+        params={"token": token, "what": "ivr2:1/test.json", "contents": '{"test":"hello"}'},
+        timeout=10
+    )
+    r_get = requests.get(
+        f"{YEMOT_API_URL}GetTextFile",
+        params={"token": token, "what": "ivr2:1/test.json"},
+        timeout=10
+    )
+    return {
+        "upload_status": r_up.status_code,
+        "upload_response": r_up.text,
+        "get_status": r_get.status_code,
+        "get_response": r_get.text
+    }
+
+# ---------- נתיב בדיקה: מה שמור כרגע? ----------
+@app.route('/debug-credentials', methods=['GET'])
+def debug_credentials():
+    return dict(load_credentials())
+
 # ---------- שלוחה 1: שמירת פרטי מערכת ----------
 @app.route('/save-credentials', methods=['GET', 'POST'])
 def save_credentials():
@@ -98,17 +129,20 @@ def save_credentials():
 
     logging.info(f"/save-credentials: cli={cli}, user_system={user_system}")
 
+    if user_system and user_system in request.values:
+        save_field(cli, 'system', user_system.strip())
+    if password and password in request.values:
+        save_field(cli, 'password', password.strip())
+
     if not user_system:
         return ym_read("user_system", "t-ברוכים הבאים למגדיר פון, קו ההגדרות המתקדמות מבית פון קול אנא הקישו את מספר המערכת בסיום הקישו סולמית", 10)
     if not password:
         return ym_read("password", "t-אנא הקש את סיסמת המערכת ובסיומה סולמית", 10)
 
-    save_user_credentials(cli, user_system.strip(), password.strip())
-
     if cli:
         msg = f"t-הפרטים נשמרו בהצלחה למספר {cli}"
     else:
-        msg = "t-הפרטים נשמרו בהצלחה (ברירת מחדל)"
+        msg = "t-הפרטים נשמרו בהצלחה"
     return ym_say_and_go_back(msg)
 
 # ---------- שלוחה 2: יצירת תפריט ----------
@@ -133,6 +167,13 @@ def create_menu():
 
     logging.info(f"/create-menu: cli={cli}, user_system={user_system}, use_saved={use_saved}")
 
+    # שלב 0: שמירה מיידית של מה שהתקבל
+    if user_system and user_system in request.values:
+        save_field(cli, 'system', user_system.strip())
+    if password and password in request.values:
+        save_field(cli, 'password', password.strip())
+
+    # שלב 0.5: בדיקת זיכרון
     saved_system, saved_password = get_user_credentials(cli)
 
     if saved_system and saved_password and use_saved is None and not user_system:
@@ -147,17 +188,13 @@ def create_menu():
     if saved_system and saved_password and use_saved == "1":
         user_system = saved_system
         password = saved_password
-        logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
 
     if not user_system:
         return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
-
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    if user_system in request.values and password in request.values:
-        save_user_credentials(cli, user_system.strip(), password.strip())
-
+    # שלב 3 ואילך
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה ובסיום הקישו סולמית, לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
 
@@ -240,8 +277,7 @@ rate={selected_speed}
         logging.info(f"UploadTextFile: {r2.status_code} - {r2.text}")
 
         if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
-            msg = f"t-השלוחה {clean_ext} הוגדרה בהצלחה"
-            return ym_say_and_go_back(msg)
+            return ym_say_and_go_back(f"t-השלוחה {clean_ext} הוגדרה בהצלחה")
         else:
             return ym_say_and_go_back("t-השלוחה נוצרה אך התפריט לא נטען")
 
@@ -269,30 +305,28 @@ def create_playfile():
 
     logging.info(f"/create-playfile: cli={cli}, user_system={user_system}, use_saved={use_saved}")
 
+    if user_system and user_system in request.values:
+        save_field(cli, 'system', user_system.strip())
+    if password and password in request.values:
+        save_field(cli, 'password', password.strip())
+
     saved_system, saved_password = get_user_credentials(cli)
 
     if saved_system and saved_password and use_saved is None and not user_system:
-        logging.info(f"נמצאו פרטים שמורים: {saved_system}")
         return ym_read("use_saved", f"t-מערכת {saved_system} שמורה. להמשך הקש 1, להחלפת מערכת הקש 2", 1)
 
     if use_saved == "2":
         delete_user_credentials(cli)
         saved_system, saved_password = None, None
-        logging.info("המשתמש בחר להחליף מערכת")
 
     if saved_system and saved_password and use_saved == "1":
         user_system = saved_system
         password = saved_password
-        logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
 
     if not user_system:
         return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
-
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
-
-    if user_system in request.values and password in request.values:
-        save_user_credentials(cli, user_system.strip(), password.strip())
 
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה שברצונכם להגדיר לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה בסיום הקישו סולמית", 10)
@@ -393,11 +427,6 @@ after_play=return
     except Exception as e:
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
-
-# ---------- נתיב בדיקה ----------
-@app.route('/debug-credentials', methods=['GET'])
-def debug_credentials():
-    return dict(load_credentials())
 
 # ---------- הרצת השרת ----------
 if __name__ == '__main__':
