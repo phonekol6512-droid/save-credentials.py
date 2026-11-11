@@ -53,7 +53,7 @@ def save_credentials_to_file(data):
             timeout=15
         )
         if r.status_code == 200 and '"responseStatus":"OK"' in r.text:
-            logging.info("credentials נשמרו בהצלחה בימות")
+            logging.info(f"credentials נשמרו בהצלחה בימות: {data}")
             return True
         else:
             logging.error(f"שגיאה בשמירה לימות: {r.text}")
@@ -77,7 +77,7 @@ def save_field(cli, field, value):
         data[key] = {}
     data[key][field] = value
     save_credentials_to_file(data)
-    logging.info(f"נשמר {field} תחת '{key}'")
+    logging.info(f"נשמר {field}='{value[:3]}...' תחת '{key}'")
 
 def delete_user_credentials(cli):
     """מוחק פרטים של משתמש"""
@@ -101,7 +101,11 @@ def ym_say_and_go_back(text: str):
     """משמיע הודעה וחוזר לתפריט הקודם (ללא לופ)"""
     return ym_response(f"id_list_message={text}")
 
-# ---------- נתיב בדיקה: השמירה בימות ----------
+# ---------- נתיב בדיקה ----------
+@app.route('/debug-credentials', methods=['GET'])
+def debug_credentials():
+    return dict(load_credentials())
+
 @app.route('/test-yemot-file', methods=['GET'])
 def test_yemot_file():
     token = os.environ.get('MASTER_TOKEN')
@@ -124,11 +128,6 @@ def test_yemot_file():
         "get_response": r_get.text
     }
 
-# ---------- נתיב בדיקה: מה שמור כרגע ----------
-@app.route('/debug-credentials', methods=['GET'])
-def debug_credentials():
-    return dict(load_credentials())
-
 # ---------- שלוחה 1: שמירת פרטי מערכת ----------
 @app.route('/save-credentials', methods=['GET', 'POST'])
 def save_credentials():
@@ -138,9 +137,10 @@ def save_credentials():
 
     logging.info(f"/save-credentials: cli={cli}, user_system={user_system}")
 
-    if user_system and user_system in request.values:
+    # תיקון הבאג: בודקים 'user_system' (מפתח) ולא user_system (ערך)
+    if 'user_system' in request.values and user_system:
         save_field(cli, 'system', user_system.strip())
-    if password and password in request.values:
+    if 'password' in request.values and password:
         save_field(cli, 'password', password.strip())
 
     if not user_system:
@@ -174,12 +174,12 @@ def create_menu():
     hash_setting = request.values.get('hash_setting')
     star_setting = request.values.get('star_setting')
 
-    logging.info(f"/create-menu: cli={cli}, user_system={user_system}, use_saved={use_saved}")
+    logging.info(f"/create-menu: cli={cli}, user_system={user_system}, use_saved={use_saved}, has_password={'password' in request.values}")
 
-    # שמירה מיידית של מה שהתקבל
-    if user_system and user_system in request.values:
+    # תיקון הבאג: בודקים 'user_system' (מפתח) ולא user_system (ערך)
+    if 'user_system' in request.values and user_system:
         save_field(cli, 'system', user_system.strip())
-    if password and password in request.values:
+    if 'password' in request.values and password:
         save_field(cli, 'password', password.strip())
 
     # בדיקת זיכרון
@@ -331,11 +331,12 @@ def create_playfile():
     end_extension = request.values.get('end_extension')
     last_play_action = request.values.get('last_play_action')
 
-    logging.info(f"/create-playfile: cli={cli}, user_system={user_system}, use_saved={use_saved}")
+    logging.info(f"/create-playfile: cli={cli}, user_system={user_system}, use_saved={use_saved}, has_password={'password' in request.values}")
 
-    if user_system and user_system in request.values:
+    # תיקון הבאג
+    if 'user_system' in request.values and user_system:
         save_field(cli, 'system', user_system.strip())
-    if password and password in request.values:
+    if 'password' in request.values and password:
         save_field(cli, 'password', password.strip())
 
     saved_system, saved_password = get_user_credentials(cli)
