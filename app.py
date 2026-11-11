@@ -19,7 +19,8 @@ def load_credentials():
         try:
             with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except:
+        except Exception as e:
+            logging.error(f"שגיאה בטעינת credentials: {e}")
             return {}
     return {}
 
@@ -42,6 +43,15 @@ def save_user_credentials(cli, system, password):
     data[key] = {'system': system, 'password': password}
     save_credentials_to_file(data)
     logging.info(f"פרטים נשמרו תחת '{key}'")
+
+def delete_user_credentials(cli):
+    """מוחק פרטים של משתמש"""
+    data = load_credentials()
+    key = cli if cli else 'default'
+    if key in data:
+        del data[key]
+        save_credentials_to_file(data)
+        logging.info(f"פרטים נמחקו עבור '{key}'")
 
 # ---------- פונקציות בסיסיות ----------
 def ym_response(content: str):
@@ -74,7 +84,7 @@ def save_credentials():
         msg = f"t-הפרטים נשמרו בהצלחה למספר {cli}"
     else:
         msg = "t-הפרטים נשמרו בהצלחה (ברירת מחדל)"
-    return ym_say_and_go_back (msg)
+    return ym_say_and_go_back(msg)
 
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
@@ -82,6 +92,7 @@ def create_menu():
     cli = request.values.get('cli')
     system = request.values.get('system')
     password = request.values.get('password')
+    use_saved = request.values.get('use_saved')
     extension = request.values.get('extension')
     change_default = request.values.get('change_default')
     num_digits = request.values.get('num_digits')
@@ -95,13 +106,21 @@ def create_menu():
     hash_setting = request.values.get('hash_setting')
     star_setting = request.values.get('star_setting')
 
-    # ---------- שלב 0: שליפת פרטים מהזיכרון (אם קיימים) ----------
-    if not system or not password:
-        saved_system, saved_password = get_user_credentials(cli)
-        if saved_system and saved_password:
-            system = saved_system
-            password = saved_password
-            logging.info(f"נשלפו פרטים שמורים ל-CLI {cli}")
+    # ---------- שלב 0: בדיקת זיכרון ----------
+    saved_system, saved_password = get_user_credentials(cli)
+
+    if saved_system and saved_password and use_saved is None and not system:
+        return ym_read("use_saved", f"t-מערכת {saved_system} שמורה. להמשך הקש 1, להחלפת מערכת הקש 2", 1)
+
+    if use_saved == "2":
+        delete_user_credentials(cli)
+        saved_system, saved_password = None, None
+        logging.info("המשתמש בחר להחליף מערכת")
+
+    if saved_system and saved_password and use_saved == "1":
+        system = saved_system
+        password = saved_password
+        logging.info(f"משתמש בחר להשתמש במערכת השמורה {system}")
 
     # ---------- שלב 1: מספר מערכת ----------
     if not system:
@@ -111,8 +130,8 @@ def create_menu():
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה (אם הגיעו מה-read) ----------
-    if cli:
+    # ---------- שמירה (רק אם הגיעו מהמשתמש) ----------
+    if cli and system in request.values and password in request.values:
         save_user_credentials(cli, system.strip(), password.strip())
 
     # ---------- שלב 3: מספר שלוחה ----------
@@ -253,6 +272,7 @@ def create_playfile():
     cli = request.values.get('cli')
     system = request.values.get('system')
     password = request.values.get('password')
+    use_saved = request.values.get('use_saved')
     extension = request.values.get('extension')
     say_length = request.values.get('say_length')
     play_beep = request.values.get('play_beep')
@@ -264,13 +284,21 @@ def create_playfile():
     end_extension = request.values.get('end_extension')
     last_play_action = request.values.get('last_play_action')
 
-    # ---------- שלב 0: שליפת פרטים מהזיכרון ----------
-    if not system or not password:
-        saved_system, saved_password = get_user_credentials(cli)
-        if saved_system and saved_password:
-            system = saved_system
-            password = saved_password
-            logging.info(f"נשלפו פרטים שמורים ל-CLI {cli}")
+    # ---------- שלב 0: בדיקת זיכרון ----------
+    saved_system, saved_password = get_user_credentials(cli)
+
+    if saved_system and saved_password and use_saved is None and not system:
+        return ym_read("use_saved", f"t-מערכת {saved_system} שמורה. להמשך הקש 1, להחלפת מערכת הקש 2", 1)
+
+    if use_saved == "2":
+        delete_user_credentials(cli)
+        saved_system, saved_password = None, None
+        logging.info("המשתמש בחר להחליף מערכת")
+
+    if saved_system and saved_password and use_saved == "1":
+        system = saved_system
+        password = saved_password
+        logging.info(f"משתמש בחר להשתמש במערכת השמורה {system}")
 
     # --- שלב 1: system ---
     if not system:
@@ -280,8 +308,8 @@ def create_playfile():
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה ----------
-    if cli:
+    # ---------- שמירה (רק אם הגיעו מהמשתמש) ----------
+    if cli and system in request.values and password in request.values:
         save_user_credentials(cli, system.strip(), password.strip())
 
     # --- שלב 3: extension ---
