@@ -63,19 +63,18 @@ def ym_say_and_go_back(text: str):
 # ---------- שלוחה 1: שמירת פרטי מערכת ----------
 @app.route('/save-credentials', methods=['GET', 'POST'])
 def save_credentials():
-    # תיקון: מספר הטלפון מגיע ב-ApiPhone
     cli = request.values.get('ApiPhone')
-    system = request.values.get('system')
+    user_system = request.values.get('user_system')
     password = request.values.get('password')
 
-    logging.info(f"/save-credentials: cli={cli}, system={system}")
+    logging.info(f"/save-credentials: cli={cli}, user_system={user_system}")
 
-    if not system:
-        return ym_read("system", "t-ברוכים הבאים למגדיר פון, קו ההגדרות המתקדמות מבית פון קול אנא הקישו את מספר המערכת בסיום הקישו סולמית", 10)
+    if not user_system:
+        return ym_read("user_system", "t-ברוכים הבאים למגדיר פון, קו ההגדרות המתקדמות מבית פון קול אנא הקישו את מספר המערכת בסיום הקישו סולמית", 10)
     if not password:
         return ym_read("password", "t-אנא הקש את סיסמת המערכת ובסיומה סולמית", 10)
 
-    save_user_credentials(cli, system.strip(), password.strip())
+    save_user_credentials(cli, user_system.strip(), password.strip())
 
     if cli:
         msg = f"t-הפרטים נשמרו בהצלחה למספר {cli}"
@@ -86,9 +85,8 @@ def save_credentials():
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
 def create_menu():
-    # תיקון: מספר הטלפון מגיע ב-ApiPhone
     cli = request.values.get('ApiPhone')
-    system = request.values.get('system')
+    user_system = request.values.get('user_system')
     password = request.values.get('password')
     use_saved = request.values.get('use_saved')
     extension = request.values.get('extension')
@@ -104,12 +102,13 @@ def create_menu():
     hash_setting = request.values.get('hash_setting')
     star_setting = request.values.get('star_setting')
 
-    logging.info(f"/create-menu: cli={cli}, params={list(request.values.keys())}")
+    logging.info(f"/create-menu: cli={cli}, user_system={user_system}, use_saved={use_saved}, params={list(request.values.keys())}")
 
     # ---------- שלב 0: בדיקת זיכרון ----------
     saved_system, saved_password = get_user_credentials(cli)
 
-    if saved_system and saved_password and use_saved is None and not system:
+    if saved_system and saved_password and use_saved is None and not user_system:
+        logging.info(f"נמצאו פרטים שמורים: {saved_system}")
         return ym_read("use_saved", f"t-מערכת {saved_system} שמורה. להמשך הקש 1, להחלפת מערכת הקש 2", 1)
 
     if use_saved == "2":
@@ -118,21 +117,21 @@ def create_menu():
         logging.info("המשתמש בחר להחליף מערכת")
 
     if saved_system and saved_password and use_saved == "1":
-        system = saved_system
+        user_system = saved_system
         password = saved_password
-        logging.info(f"משתמש בחר להשתמש במערכת השמורה {system}")
+        logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
 
-    # ---------- שלב 1: מספר מערכת ----------
-    if not system:
-        return ym_read("system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+    # ---------- שלב 1: מספר מערכת (user_system) ----------
+    if not user_system:
+        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
 
     # ---------- שלב 2: סיסמה ----------
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
     # ---------- שמירה (אם הגיעו מהמשתמש) ----------
-    if system in request.values and password in request.values:
-        save_user_credentials(cli, system.strip(), password.strip())
+    if user_system in request.values and password in request.values:
+        save_user_credentials(cli, user_system.strip(), password.strip())
 
     # ---------- שלב 3: מספר שלוחה ----------
     if not extension:
@@ -180,7 +179,7 @@ def create_menu():
         if not clean_ext:
             return ym_say_and_go_back("t-שגיאה: השלוחה ריקה")
 
-        token = f"{system.strip()}:{password.strip()}"
+        token = f"{user_system.strip()}:{password.strip()}"
         digits = int(num_digits) if (num_digits and num_digits.isdigit()) else 1
 
         voice_map = {"1": "Elik_2100", "2": "Jacob", "3": "Sivan", "4": "Osnat"}
@@ -243,9 +242,8 @@ rate={selected_speed}
 # ---------- שלוחה 3: יצירת שלוחת השמעה ----------
 @app.route('/create-playfile', methods=['GET', 'POST'])
 def create_playfile():
-    # תיקון: מספר הטלפון מגיע ב-ApiPhone
     cli = request.values.get('ApiPhone')
-    system = request.values.get('system')
+    user_system = request.values.get('user_system')
     password = request.values.get('password')
     use_saved = request.values.get('use_saved')
     extension = request.values.get('extension')
@@ -259,12 +257,13 @@ def create_playfile():
     end_extension = request.values.get('end_extension')
     last_play_action = request.values.get('last_play_action')
 
-    logging.info(f"/create-playfile: cli={cli}, params={list(request.values.keys())}")
+    logging.info(f"/create-playfile: cli={cli}, user_system={user_system}, use_saved={use_saved}")
 
     # ---------- שלב 0: בדיקת זיכרון ----------
     saved_system, saved_password = get_user_credentials(cli)
 
-    if saved_system and saved_password and use_saved is None and not system:
+    if saved_system and saved_password and use_saved is None and not user_system:
+        logging.info(f"נמצאו פרטים שמורים: {saved_system}")
         return ym_read("use_saved", f"t-מערכת {saved_system} שמורה. להמשך הקש 1, להחלפת מערכת הקש 2", 1)
 
     if use_saved == "2":
@@ -273,21 +272,21 @@ def create_playfile():
         logging.info("המשתמש בחר להחליף מערכת")
 
     if saved_system and saved_password and use_saved == "1":
-        system = saved_system
+        user_system = saved_system
         password = saved_password
-        logging.info(f"משתמש בחר להשתמש במערכת השמורה {system}")
+        logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
 
-    # --- שלב 1: system ---
-    if not system:
-        return ym_read("system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+    # --- שלב 1: user_system ---
+    if not user_system:
+        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
 
     # --- שלב 2: password ---
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
     # ---------- שמירה (אם הגיעו מהמשתמש) ----------
-    if system in request.values and password in request.values:
-        save_user_credentials(cli, system.strip(), password.strip())
+    if user_system in request.values and password in request.values:
+        save_user_credentials(cli, user_system.strip(), password.strip())
 
     # --- שלב 3: extension ---
     if not extension:
@@ -333,7 +332,7 @@ def create_playfile():
         if not clean_ext:
             return ym_say_and_go_back("t-שגיאה: השלוחה ריקה")
 
-        token = f"{system.strip()}:{password.strip()}"
+        token = f"{user_system.strip()}:{password.strip()}"
 
         say_length_value = "say_length=yes" if say_length == "1" else "playfile_say_length_if=5" if say_length == "2" else "say_length=no"
         beep_line = "play_beep=no" if play_beep == "1" else ""
