@@ -10,21 +10,50 @@ YEMOT_API_URL = "https://www.call2all.co.il/ym/api/"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-CREDENTIALS_FILE = "credentials.json"
+CREDENTIALS_PATH = "ivr2:/credentials.json"
 
 def load_credentials():
-    if os.path.exists(CREDENTIALS_FILE):
-        try:
-            with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logging.error(f"שגיאה בטעינת credentials: {e}")
-            return {}
-    return {}
+    token = os.environ.get('MASTER_TOKEN')
+    if not token:
+        logging.error("MASTER_TOKEN לא מוגדר!")
+        return {}
+    try:
+        r = requests.get(
+            f"{YEMOT_API_URL}GetTextFile",
+            params={"token": token, "what": CREDENTIALS_PATH},
+            timeout=10
+        )
+        if r.status_code == 200 and r.text.strip():
+            return json.loads(r.text)
+        return {}
+    except Exception as e:
+        logging.error(f"שגיאה בטעינה מימות: {e}")
+        return {}
 
 def save_credentials_to_file(data):
-    with open(CREDENTIALS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    token = os.environ.get('MASTER_TOKEN')
+    if not token:
+        logging.error("MASTER_TOKEN לא מוגדר!")
+        return False
+    try:
+        r = requests.post(
+            f"{YEMOT_API_URL}UploadTextFile",
+            params={
+                "token": token,
+                "what": CREDENTIALS_PATH,
+                "contents": json.dumps(data, ensure_ascii=False, indent=2)
+            },
+            timeout=15
+        )
+        if r.status_code == 200 and '"responseStatus":"OK"' in r.text:
+            logging.info("credentials נשמרו בהצלחה בימות")
+            return True
+        else:
+            logging.error(f"שגיאה בשמירה לימות: {r.text}")
+            return False
+    except Exception as e:
+        logging.error(f"שגיאה בשמירה לימות: {e}")
+        return False
 
 def get_user_credentials(cli):
     data = load_credentials()
@@ -39,7 +68,7 @@ def save_user_credentials(cli, system, password):
     key = cli if cli else 'default'
     data[key] = {'system': system, 'password': password}
     save_credentials_to_file(data)
-    logging.info(f"פרטים נשמרו תחת '{key}'")
+    logging.info(f"פרטים נשמרו תחת '{key}' בימות")
 
 def delete_user_credentials(cli):
     data = load_credentials()
@@ -47,7 +76,7 @@ def delete_user_credentials(cli):
     if key in data:
         del data[key]
         save_credentials_to_file(data)
-        logging.info(f"פרטים נמחקו עבור '{key}'")
+        logging.info(f"פרטים נמחקו עבור '{key}' בימות")
 
 def ym_response(content: str):
     res = make_response(content)
@@ -102,9 +131,8 @@ def create_menu():
     hash_setting = request.values.get('hash_setting')
     star_setting = request.values.get('star_setting')
 
-    logging.info(f"/create-menu: cli={cli}, user_system={user_system}, use_saved={use_saved}, params={list(request.values.keys())}")
+    logging.info(f"/create-menu: cli={cli}, user_system={user_system}, use_saved={use_saved}")
 
-    # ---------- שלב 0: בדיקת זיכרון ----------
     saved_system, saved_password = get_user_credentials(cli)
 
     if saved_system and saved_password and use_saved is None and not user_system:
@@ -121,59 +149,47 @@ def create_menu():
         password = saved_password
         logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
 
-    # ---------- שלב 1: מספר מערכת (user_system) ----------
     if not user_system:
         return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שלב 2: סיסמה ----------
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה (אם הגיעו מהמשתמש) ----------
     if user_system in request.values and password in request.values:
         save_user_credentials(cli, user_system.strip(), password.strip())
 
-    # ---------- שלב 3: מספר שלוחה ----------
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה ובסיום הקישו סולמית, לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
 
-    # ---------- שלב 4: שינוי ברירת מחדל של הקשות ----------
     if not change_default:
         return ym_read("change_default", "t-ברירת מחדל לכל שלוחה יש סיפרה אחת בלבד וכשמקישים 1 אז נכנסים לשלוחה 1 ואם מקישים 2 אז נכנסים לשלוחה 2, לשינוי הקישו 1 וסולמית להמשך ללא שינוי הקישו 0", 1)
     if change_default == "1" and not num_digits:
         return ym_read("num_digits", "t-אנא הקישו את מספר ההקשות בסיום הקישו סולמית", 1)
 
-    # ---------- שלב 5: בחירת קול ----------
     if not change_voice:
         return ym_read("change_voice", "t-האם ברצונך להגדיר את הקול הרובוטי בשלוחה, להגדרה הקישו 1 וסולמית להמשך ללא שינוי הקישו 0 וסולמית", 1)
     if change_voice == "1" and not voice_choice:
         return ym_read("voice_choice", "t-בחר קול:  לאליק הקישו 1 וסולמית ליעקב הקישו 2 וסולמית לסיוון הקישו 3 וסולמית לאסנת הקישו 4 וסולמית", 1)
 
-    # ---------- שלב 6: מהירות הקריאה ----------
     if not change_speed:
         return ym_read("change_speed", "t-האם ברצונך לשנות את מהירות הקול הרובוטי? לשינוי הקישו 1 וסולמית להמשך ללא שינוי הקישו 0 וסולמית", 1)
     if change_speed == "1" and not speed_choice:
         return ym_read("speed_choice", "t-בחר מהירות: לקול קצת איטי הקש 1, לקול קצת מהיר הקש 2, לקול איטי הקש 3, לקול מהיר הקש 4, לקול איטי מאוד הקש 5, לקול מהיר מאוד הקש 6, לקול איטי במיוחד הקש 7, לקול מהיר במיוחד הקש 8", 1)
 
-    # ---------- שלב 7: ספירת העומר ----------
     if omer_choice is None:
         return ym_read("omer_choice", "t-האם להפעיל בתפריט תזכורת ספירת העומר? להפעלה הקישו 1 וסולמית לביטול הקישו 0 וסולמית", 1)
 
-    # ---------- שלב 8: הודעת ועידה פעילה ----------
     if conf_bridge is None:
         return ym_read("conf_bridge", "t-האם ברצונך להפעיל הודעה שמודיעה אם קיימת ועידה פעילה? להפעלה הקישו 1 וסולמית לביטול הקישו 0 וסולמית", 1)
     if conf_bridge == "1" and not conf_extension:
         return ym_read("conf_extension", "t-אנא הקישו את מספר השלוחה של חדר הועידה ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
 
-    # ---------- שלב 9: מקש סולמית # ----------
     if not hash_setting:
         return ym_read("hash_setting", "t-ברירת המחדל מקש סולמית משמש לחזרה לתפריט הקודם, אם ברצונך ששלוחה סולמית תיהיה שלוחה בפני עצמה הקישו 1 וסולמית להמשך ללא שינוי הקישו 0 וסולמית", 1)
 
-    # ---------- שלב 10: מקש כוכבית * ----------
     if star_setting is None:
         return ym_read("star_setting", "t-ברירת המחדל מקש כוכבית משמש כמקש חזרה לתפריט הראשי, אם ברצונך ששלוחת כוכבית תיהיה שלוחה בפני עצמה הקישו 1 וסולמית להמשך ללא שינוי הקישו 0 וסולמית", 1)
 
-    # ===================== יצירת השלוחה =====================
     try:
         clean_ext = extension.strip().replace('*', '/').replace('-', '/').strip('/')
         if not clean_ext:
@@ -224,13 +240,7 @@ rate={selected_speed}
         logging.info(f"UploadTextFile: {r2.status_code} - {r2.text}")
 
         if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
-            speed_labels = {"-2": "קצת איטי", "2": "קצת מהיר", "-4": "איטי", "4": "מהיר", "-7": "איטי מאוד", "7": "מהיר מאוד", "-10": "איטי במיוחד", "10": "מהיר במיוחד"}
-            speed_label = speed_labels.get(selected_speed, "רגיל")
-            omer_status = "פעיל" if omer_choice == "1" else "כבוי"
-            conf_status = f"פעיל (שלוחה {conf_extension})" if conf_bridge == "1" else "כבוי"
-            hash_status = "שלוחה נפרדת" if hash_setting == "1" else "ברירת מחדל (חזרה)"
-            star_status = "שלוחה נפרדת" if star_setting == "1" else "ברירת מחדל (הפרדה)"
-            msg = f"t-השלוחה {clean_ext} הוגדרה בהצלחה על ידי מגדיר פון שלום ולהתראות. מהירות: {speed_label}. ספירת העומר: {omer_status}. ועידה: {conf_status}. סולמית: {hash_status}. כוכבית: {star_status}"
+            msg = f"t-השלוחה {clean_ext} הוגדרה בהצלחה"
             return ym_say_and_go_back(msg)
         else:
             return ym_say_and_go_back("t-השלוחה נוצרה אך התפריט לא נטען")
@@ -259,7 +269,6 @@ def create_playfile():
 
     logging.info(f"/create-playfile: cli={cli}, user_system={user_system}, use_saved={use_saved}")
 
-    # ---------- שלב 0: בדיקת זיכרון ----------
     saved_system, saved_password = get_user_credentials(cli)
 
     if saved_system and saved_password and use_saved is None and not user_system:
@@ -276,57 +285,45 @@ def create_playfile():
         password = saved_password
         logging.info(f"משתמש בחר להשתמש במערכת השמורה {user_system}")
 
-    # --- שלב 1: user_system ---
     if not user_system:
         return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
 
-    # --- שלב 2: password ---
     if not password:
         return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
 
-    # ---------- שמירה (אם הגיעו מהמשתמש) ----------
     if user_system in request.values and password in request.values:
         save_user_credentials(cli, user_system.strip(), password.strip())
 
-    # --- שלב 3: extension ---
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה שברצונכם להגדיר לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה בסיום הקישו סולמית", 10)
 
-    # --- שלב 4: אורך הקובץ ---
     if say_length is None:
         return ym_read("say_length", "t- אם ברצונך להגדיר שישמיע את אורך הקובץ לפני שמשמיע את הקובץ? להגדרה כברירת מחדל הקש 0 אם ברצונך שישמיע את אורך הקובץ הקש 1 אם ברצונך שישמיע את אורך הקובץ רק אם הקובץ ארוך מחמש דקות הקש 2", 1)
 
-    # --- שלב 5: ביפ ---
     if play_beep is None:
         return ym_read("play_beep", "t-ברירת המחדל של המערכת משמיע בין קובץ לקובץ ציפצוף להמשך ללא שינוי הקש 0 להגדרה שלא ישמיע ציפצוף בין הודעה להודעה הקש 1", 1)
 
-    # --- שלב 6: סדר השמעה ---
     if play_order is None:
         return ym_read("play_order", "t-ברירת מחדל של המערכת משמיע את הקבצים מהחדש לישן להמשך ללא שינוי הקש 0 לשינוי והגדרה שישמיע את הקבצים מהישן לחדש הקש 1", 1)
 
-    # --- שלב 7: כמות הודעות ---
     if say_files_amount is None:
         return ym_read("say_files_amount", "t-האם ברצונך שישמיע בכניסה לשלוחה את כמות הקבצים שנמצאים בשלוחה? להגדרה כברירת מחדל הקש 0 להגדרה שישמיע את כמות הקבצים הקש 1", 1)
 
-    # --- שלב 8: מקור ---
     if source_extension is None:
         return ym_read("source_extension", "t-ברירת המחדל של המערכת משמיע את הקבצים מהשלוחה עצמה להמשך ללא שינוי הקש 0 לשינוי והגדרה שישמיע את הקבצים משלוחה אחרת הקש 1", 1)
 
     if source_extension == "1" and not source_extension_path:
         return ym_read("source_extension_path", "t-הקש את השלוחה שברצונך ממנה שישמיע את הקבצים כאשר בין שלוחה לשלוחה הקש כוכבית", 10)
 
-    # --- שלב 9: סיום ---
     if end_action is None:
         return ym_read("end_action", "t-ברירת מחדל של המערכת בסיום השמעת ההודעות חוזר לתפריט הקודם, להמשך ללא שינוי הקש 0 לשינוי והגדרה שיעבור בסיום ההשמעה לשלוחה אחרת הקש 1", 1)
 
     if end_action == "1" and not end_extension:
         return ym_read("end_extension", "t-אנא הקש את מספר השלוחה אליה יעבור בסיום כאשר בין שלוחה לשלוחה הקש כוכבית", 10)
 
-    # --- שלב 10: שמירת מיקום ---
     if last_play_action is None:
         return ym_read("last_play_action", "t-ברירת המחדל של המערכת משמיע את השלוחה מחדש כל פעם להמשך ללא שינוי הקש 0 לשינוי והגדרה שיכנס לשלוחה ישאל את המאזין האם לחזור למקום האחרון אליו האזין בשלוחה הקש 1 לשינוי והגדרה שמייד יחזור למיקום האחרון אליו האזין הקש שתיים", 1)
 
-    # --- יצירת השלוחה ---
     try:
         clean_ext = extension.strip().replace('*', '/').replace('-', '/').strip('/')
         if not clean_ext:
