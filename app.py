@@ -580,7 +580,7 @@ def active_calls():
                 return ym_response(f"id_list_message=t-אין כרגע אף מספר מחובר למערכת\nend=true")
             
             # כאן הסרנו את המספר האישי מתחילת ההודעה
-            msg = f"t-מחוברים כרגע למערכת {total_count} מספרים שונים לשמיעת המספרים האחרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
+            msg = f"t-מספר המאזינים שמחוברים כרגע למערכת הוא {total_count} מספרים שונים לשמיעת המספרים המאזינים עם אפשרות ניתוק הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
             return ym_read("action", msg, 1)
 
         if action == "3":
@@ -643,7 +643,7 @@ def active_calls():
             duration = next_call.get('duration', 0)
             path = next_call.get('path') or "לא ידועה"
 
-            msg = f"t-המספר {phone} מחובר {duration} שניות ונמצא בשלוחה {path} לניתוק הקש 1 לשמיעת המספר הבא הקש 2 ליציאה הקש 0"
+            msg = f"t-מספר הפלאפון {phone} מחובר {duration} שניות ונמצא כרגע בשלוחה {path} לניתוק המספר הקש 1 לשמיעת המספר הבא הקש 2 ליציאה הקש 0"
             return ym_read("action", msg, 1)
 
     call_states[cli] = {'mode': 'main', 'current_call_id': None}
