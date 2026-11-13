@@ -569,6 +569,26 @@ def active_calls():
     other_calls = [c for c in calls if c.get('callerIdNum') != cli and c.get('id') not in just_disconnected]
     total_count = len(calls)
 
+    # ================= טיפול בהעברה לשלוחה =================
+    if state['mode'] == 'wait_transfer_ext':
+        transfer_ext = request.values.get('transfer_ext')
+        if transfer_ext and transfer_ext.strip() != "*":
+            clean_ext = transfer_ext.strip().replace('*', '/').replace('-', '/').strip('/')
+            call_id_to_transfer = state.get('current_call_id')
+            if call_id_to_transfer:
+                # ביצוע העברה דרך ה-API
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer:{clean_ext}"}, timeout=5)
+                logging.info(f"Transfer {call_id_to_transfer} to {clean_ext}: {res.text}")
+                just_disconnected.add(call_id_to_transfer)
+                other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
+            
+            state['mode'] = 'sub'
+            action = "3" # עובר אוטומטית להצגת השיחה הבאה (כי עכשיו 3 זה הבא)
+        else:
+            # ביטול (הוקש כוכבית או כלום)
+            state['mode'] = 'sub'
+            action = "3" # עובר אוטומטית להצגת השיחה הבאה
+
     # ================= תפריט ראשי =================
     if state['mode'] == 'main':
         just_disconnected.clear()  # איפוס הניתוקים בכל כניסה לתפריט הראשי
@@ -579,8 +599,7 @@ def active_calls():
                 call_states[cli] = {'mode': 'main', 'current_call_id': None}
                 return ym_response(f"id_list_message=t-אין כרגע אף מספר מחובר למערכת\nend=true")
             
-            # כאן הסרנו את המספר האישי מתחילת ההודעה
-            msg = f"t-מספר המאזינים שמחוברים כרגע למערכת הוא {total_count} מספרים שונים לשמיעת המספרים המאזינים עם אפשרות ניתוק הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
+            msg = f"t-מחוברים כרגע למערכת {total_count} מספרים שונים לשמיעת המספרים האחרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
             return ym_read("action", msg, 1)
 
         if action == "3":
@@ -599,7 +618,7 @@ def active_calls():
 
         if action == "1":
             state['mode'] = 'sub'
-            action = "2" # מפעיל את הצגת השיחה הראשונה
+            action = "3" # מפעיל את הצגת השיחה הראשונה (כי עכשיו 3 זה הבא/הצגה)
 
     # ================= תת תפריט =================
     if state['mode'] == 'sub':
@@ -607,7 +626,7 @@ def active_calls():
             call_states[cli] = {'mode': 'main', 'current_call_id': None}
             return ym_response("id_list_message=t-חזרת לתפריט הראשי\nend=true")
 
-        if action == "1":
+        if action == "2":
             # ניתוק השיחה הנוכחית
             call_id_to_disconnect = state.get('current_call_id')
             if call_id_to_disconnect:
@@ -617,9 +636,14 @@ def active_calls():
                 # הסרת השיחה מהרשימה המקומית כדי שנוכל לעבור לבאה בתור
                 other_calls = [c for c in other_calls if c.get('id') != call_id_to_disconnect]
             
-            action = "2" # מפעיל את הצגת השיחה הבאה בתור
+            action = "3" # מפעיל את הצגת השיחה הבאה בתור (כי עכשיו 3 זה הבא)
 
-        if action == "2":
+        if action == "1":
+            # בקשת העברה לשלוחה
+            state['mode'] = 'wait_transfer_ext'
+            return ym_read("transfer_ext", "t-אנא הקישו את מספר השלוחה אליה תרצו להעביר את השיחה ובסיום הקישו סולמית", 10)
+
+        if action == "3":
             # מציאת השיחה הבאה בתור
             current_id = state.get('current_call_id')
             next_call = None
@@ -643,7 +667,7 @@ def active_calls():
             duration = next_call.get('duration', 0)
             path = next_call.get('path') or "לא ידועה"
 
-            msg = f"t-מספר הפלאפון {phone} מחובר {duration} שניות ונמצא כרגע בשלוחה {path} לניתוק המספר הקש 1 לשמיעת המספר הבא הקש 2 ליציאה הקש 0"
+            msg = f"t-המספר {phone} מחובר {duration} שניות ונמצא בשלוחה {path} להעברה לשלוחה אחרת הקש 1 לניתוק הקש 2 לשמיעת המספר הבא הקש 3 ליציאה הקש 0"
             return ym_read("action", msg, 1)
 
     call_states[cli] = {'mode': 'main', 'current_call_id': None}
