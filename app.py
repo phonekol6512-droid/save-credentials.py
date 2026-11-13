@@ -571,26 +571,28 @@ def active_calls():
     # ================= טיפול בהעברה לשלוחה =================
     if state['mode'] == 'wait_transfer_ext':
         transfer_ext = request.values.get('transfer_ext')
-        if transfer_ext and transfer_ext.strip() not in ["*", "0"]:
+        if transfer_ext and transfer_ext.strip() != "*":
             clean_ext = transfer_ext.strip().replace('*', '/').replace('-', '/').strip('/')
             call_id_to_transfer = state.get('current_call_id')
+            
             if call_id_to_transfer:
-                # התיקון: שימוש ב-transfer= להעברת שיחה חיה
-                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer={clean_ext}"}, timeout=5)
-                logging.info(f"Transfer {call_id_to_transfer} to {clean_ext}: {res.text}")
-                just_disconnected.add(call_id_to_transfer)
-                other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
+                # התיקון: שליחת פקודת transfer עם סלאש לפני מספר השלוחה
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer=/{clean_ext}"}, timeout=5)
+                logging.info(f"Transfer {call_id_to_transfer} to /{clean_ext}: {res.text}")
+                if '"responseStatus":"OK"' in res.text:
+                    just_disconnected.add(call_id_to_transfer)
+                    other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
             
             state['mode'] = 'sub'
-            action = "3"
+            action = "3" # עובר אוטומטית להצגת השיחה הבאה
         else:
-            # ביטול (הוקש כוכבית או 0)
+            # ביטול (הוקש כוכבית)
             state['mode'] = 'sub'
-            action = "3"
+            action = "3" # עובר אוטומטית להצגת השיחה הבאה
 
     # ================= תפריט ראשי =================
     if state['mode'] == 'main':
-        just_disconnected.clear()
+        just_disconnected.clear()  # איפוס הניתוקים בכל כניסה לתפריט הראשי
         
         if action is None:
             state['current_call_id'] = None
@@ -617,7 +619,7 @@ def active_calls():
 
         if action == "1":
             state['mode'] = 'sub'
-            action = "3"
+            action = "3" # מפעיל את הצגת השיחה הראשונה
 
     # ================= תת תפריט =================
     if state['mode'] == 'sub':
