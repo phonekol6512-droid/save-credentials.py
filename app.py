@@ -528,9 +528,10 @@ def create_record():
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
 
-# ---------- שלוחה 5: ניהול שיחות פעילות (השלוחה שלך, לא של המשתמש) ----------
+# ---------- שלוחה 5: ניהול שיחות פעילות ----------
 # מילון לניהול מצב השיחה (האם אנחנו בתפריט הראשי או בתת-תפריט, ומה ה-ID של השיחה המוצגת)
 call_states = {}
+just_disconnected = set()
 
 @app.route('/active-calls', methods=['GET', 'POST'], strict_slashes=False)
 def active_calls():
@@ -539,7 +540,7 @@ def active_calls():
 
     cli = request.values.get('ApiPhone')
     
-    # שליפת ההקשה האחרונה (העדכנית ביותר)
+    # שליפת ההקשה האחרונה
     actions = request.values.getlist('action')
     action = actions[-1] if actions else None
 
@@ -564,29 +565,32 @@ def active_calls():
         call_states[cli] = {'mode': 'main', 'current_call_id': None}
         return ym_say_and_go_back("t-שגיאה טכנית בשליפת השיחות")
 
-    # סינון השיחה של המשתמש עצמו
-    other_calls = [c for c in calls if c.get('callerIdNum') != cli]
+    # סינון השיחה של המשתמש עצמו והשיחות שזה עתה נותקו (כדי למנוע קפיצות ברשימה)
+    other_calls = [c for c in calls if c.get('callerIdNum') != cli and c.get('id') not in just_disconnected]
+    total_count = len(calls)
 
     # ================= תפריט ראשי =================
     if state['mode'] == 'main':
+        just_disconnected.clear()  # איפוס הניתוקים בכל כניסה לתפריט הראשי
+        
         if action is None:
             state['current_call_id'] = None
-            if len(other_calls) == 0:
+            if total_count == 0:
                 call_states[cli] = {'mode': 'main', 'current_call_id': None}
-                return ym_response(f"id_list_message=t-המספר שלך הוא {cli} אין כרגע מספרים אחרים מחוברים למערכת\nend=true")
+                return ym_response(f"id_list_message=t-המספר שלך הוא {cli} אין כרגע אף מספר מחובר למערכת\nend=true")
             
-            msg = f"t-המספר שלך הוא {cli} מחוברים כרגע למערכת {len(other_calls)} מספרים שונים לשמיעת המספרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
+            msg = f"t-המספר שלך הוא {cli} מחוברים כרגע למערכת {total_count} מספרים שונים לשמיעת המספרים האחרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
             return ym_read("action", msg, 1)
 
         if action == "3":
             call_states[cli] = {'mode': 'main', 'current_call_id': None}
-            if not other_calls:
-                return ym_response("id_list_message=t-אין מספרים אחרים לנתק\nend=true")
-            for call in other_calls:
+            if total_count == 0:
+                return ym_response("id_list_message=t-אין מספרים לנתק\nend=true")
+            for call in calls:
                 call_id = call.get('id')
                 if call_id:
-                    requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id, "action": "set:GOasap=hangup"}, timeout=5)
-            return ym_response(f"id_list_message=t-נותקו {len(other_calls)} מספרים בהצלחה\nend=true")
+                    requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id, "action": "hangup"}, timeout=5)
+            return ym_response(f"id_list_message=t-נותקו {total_count} מספרים בהצלחה\nend=true")
 
         if action == "0":
             call_states[cli] = {'mode': 'main', 'current_call_id': None}
@@ -606,8 +610,9 @@ def active_calls():
             # ניתוק השיחה הנוכחית
             call_id_to_disconnect = state.get('current_call_id')
             if call_id_to_disconnect:
-                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_disconnect, "action": "set:GOasap=hangup"}, timeout=5)
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_disconnect, "action": "hangup"}, timeout=5)
                 logging.info(f"Disconnect {call_id_to_disconnect}: {res.text}")
+                just_disconnected.add(call_id_to_disconnect)
                 # הסרת השיחה מהרשימה המקומית כדי שנוכל לעבור לבאה בתור
                 other_calls = [c for c in other_calls if c.get('id') != call_id_to_disconnect]
             
