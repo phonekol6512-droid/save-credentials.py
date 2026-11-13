@@ -16,14 +16,9 @@ CREDENTIALS_PATH = "ivr2:1/credentials.json"
 def load_credentials():
     token = os.environ.get('MASTER_TOKEN')
     if not token:
-        logging.error("MASTER_TOKEN לא מוגדר!")
         return {}
     try:
-        r = requests.get(
-            f"{YEMOT_API_URL}GetTextFile",
-            params={"token": token, "what": CREDENTIALS_PATH},
-            timeout=10
-        )
+        r = requests.get(f"{YEMOT_API_URL}GetTextFile", params={"token": token, "what": CREDENTIALS_PATH}, timeout=10)
         if r.status_code == 200 and r.text.strip():
             outer = json.loads(r.text)
             if outer.get("responseStatus") == "OK":
@@ -38,26 +33,11 @@ def load_credentials():
 def save_credentials_to_file(data):
     token = os.environ.get('MASTER_TOKEN')
     if not token:
-        logging.error("MASTER_TOKEN לא מוגדר!")
         return False
     try:
-        r = requests.post(
-            f"{YEMOT_API_URL}UploadTextFile",
-            params={
-                "token": token,
-                "what": CREDENTIALS_PATH,
-                "contents": json.dumps(data, ensure_ascii=False, indent=2)
-            },
-            timeout=15
-        )
-        if r.status_code == 200 and '"responseStatus":"OK"' in r.text:
-            logging.info(f"credentials נשמרו בהצלחה בימות: {data}")
-            return True
-        else:
-            logging.error(f"שגיאה בשמירה לימות: {r.text}")
-            return False
-    except Exception as e:
-        logging.error(f"שגיאה בשמירה לימות: {e}")
+        r = requests.post(f"{YEMOT_API_URL}UploadTextFile", params={"token": token, "what": CREDENTIALS_PATH, "contents": json.dumps(data, ensure_ascii=False, indent=2)}, timeout=15)
+        return r.status_code == 200 and '"responseStatus":"OK"' in r.text
+    except:
         return False
 
 def get_user_credentials(cli):
@@ -73,7 +53,6 @@ def save_field(cli, field, value):
         data[key] = {}
     data[key][field] = value
     save_credentials_to_file(data)
-    logging.info(f"נשמר {field}='{value[:3]}...' תחת '{key}'")
 
 def delete_user_credentials(cli):
     data = load_credentials()
@@ -81,7 +60,6 @@ def delete_user_credentials(cli):
     if key in data:
         del data[key]
         save_credentials_to_file(data)
-        logging.info(f"פרטים נמחקו עבור '{key}'")
 
 # ---------- פונקציות בסיסיות ----------
 def ym_response(content: str):
@@ -89,16 +67,11 @@ def ym_response(content: str):
     res.headers["Content-Type"] = "text/plain; charset=utf-8"
     return res
 
-def ym_read(var_name: str, prompt: str, max_digits=1):
-    return ym_response(f"read={prompt}={var_name},{max_digits},12,1,Digits")
+def ym_read(var_name: str, prompt: str, max_digits=1, input_type="Digits"):
+    return ym_response(f"read={prompt}={var_name},{max_digits},12,1,{input_type}")
 
 def ym_say_and_go_back(text: str):
     return ym_response(f"id_list_message={text}")
-
-# ---------- נתיבי בדיקה ----------
-@app.route('/debug-credentials', methods=['GET'])
-def debug_credentials():
-    return dict(load_credentials())
 
 # ---------- שלוחה 1: ניהול מערכת (החלפה / מחיקה / הגדרה ראשונית) ----------
 @app.route('/manage-credentials', methods=['GET', 'POST'])
@@ -110,24 +83,20 @@ def manage_credentials():
 
     saved_system, saved_password = get_user_credentials(cli)
 
-    # אם יש מערכת שמורה והמשתמש עדיין לא בחר פעולה
     if saved_system and saved_password and manage_action is None:
-        return ym_read("manage_action", f"t-המערכת {saved_system} שמורה להחלפת המערכת והסיסמה  הקש 1 למחיקת מספר המערכת והסיסמה הקש 2 ליציאה הקש 0", 1)
+        return ym_read("manage_action", f"t-מערכת {saved_system} שמורה להחלפה הקש 1 למחיקה הקש 2 ליציאה הקש 0", 1)
 
-    # אם בחר למחוק
     if manage_action == "2":
         delete_user_credentials(cli)
         return ym_say_and_go_back("t-המערכת נמחקה בהצלחה")
 
-    # אם בחר לצאת
     if manage_action == "0":
-        return ym_say_and_go_back("t-הנך מועבר לתפריט הקודם")
+        return ym_say_and_go_back("t-ללא שינוי")
 
-    # אם בחר להחליף (manage_action == "1") או שאין לו מערכת שמורה
     if not user_system:
-        return ym_read("user_system", "t-הגדרת מערכת קבועה שים לב תמיד תוכל למחוק ולשנות את המערכת הקבועה אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10, "Any")
     if not password:
-        return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
+        return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10, "Any")
 
     if 'user_system' in request.values and user_system:
         save_field(cli, 'system', user_system.strip())
@@ -143,21 +112,17 @@ def create_menu():
     user_system = request.values.get('user_system')
     password = request.values.get('password')
     
-    # שליפת המערכת השמורה (אם קיימת)
     saved_system, saved_password = get_user_credentials(cli)
 
     if saved_system and saved_password:
         user_system = saved_system
         password = saved_password
-        logging.info(f"משתמש אוטומטית במערכת השמורה {user_system}")
     else:
-        # אם אין מערכת שמורה, פשוט שואל ולא שומר כלום!
         if not user_system:
-            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10, "Any")
         if not password:
-            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
+            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10, "Any")
 
-    # שאר הפרמטרים
     extension = request.values.get('extension')
     change_default = request.values.get('change_default')
     num_digits = request.values.get('num_digits')
@@ -235,35 +200,15 @@ rate={selected_speed}
 {conf_lines}
 """
 
-        r1 = requests.get(
-            f"{YEMOT_API_URL}UpdateExtension",
-            params={"token": token, "path": f"ivr2:{clean_ext}", "type": "menu", "max_digits": digits},
-            timeout=15
-        )
-        logging.info(f"UpdateExtension: {r1.status_code} - {r1.text}")
-
+        r1 = requests.get(f"{YEMOT_API_URL}UpdateExtension", params={"token": token, "path": f"ivr2:{clean_ext}", "type": "menu", "max_digits": digits}, timeout=15)
         if not (r1.status_code == 200 and '"responseStatus":"OK"' in r1.text):
             return ym_say_and_go_back("t-שגיאה ביצירת השלוחה")
 
-        r2 = requests.post(
-            f"{YEMOT_API_URL}UploadTextFile",
-            params={"token": token, "what": f"ivr2:/{clean_ext}/ext.ini", "contents": ext_ini},
-            timeout=15
-        )
-        logging.info(f"UploadTextFile: {r2.status_code} - {r2.text}")
-
+        r2 = requests.post(f"{YEMOT_API_URL}UploadTextFile", params={"token": token, "what": f"ivr2:/{clean_ext}/ext.ini", "contents": ext_ini}, timeout=15)
         if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
-            speed_labels = {"-2": "קצת איטי", "2": "קצת מהיר", "-4": "איטי", "4": "מהיר", "-7": "איטי מאוד", "7": "מהיר מאוד", "-10": "איטי במיוחד", "10": "מהיר במיוחד"}
-            speed_label = speed_labels.get(selected_speed, "רגיל")
-            omer_status = "פעיל" if omer_choice == "1" else "כבוי"
-            conf_status = f"פעיל בשלוחה {conf_extension}" if conf_bridge == "1" else "כבוי"
-            hash_status = "שלוחה נפרדת" if hash_setting == "1" else "ברירת מחדל חזרה"
-            star_status = "שלוחה נפרדת" if star_setting == "1" else "ברירת מחדל הפרדה"
-            msg = f"t-השלוחה {clean_ext} הוגדרה בהצלחה על ידי מגדיר פון שלום ולהתראות מהירות {speed_label} ספירת העומר {omer_status} ועידה {conf_status} סולמית {hash_status} כוכבית {star_status}"
-            return ym_say_and_go_back(msg)
+            return ym_say_and_go_back(f"t-השלוחה {clean_ext} הוגדרה בהצלחה")
         else:
             return ym_say_and_go_back("t-השלוחה נוצרה אך התפריט לא נטען")
-
     except Exception as e:
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
@@ -275,21 +220,15 @@ def create_playfile():
     user_system = request.values.get('user_system')
     password = request.values.get('password')
     
-    # שליפת המערכת השמורה (אם קיימת)
     saved_system, saved_password = get_user_credentials(cli)
-
     if saved_system and saved_password:
-        user_system = saved_system
-        password = saved_password
-        logging.info(f"משתמש אוטומטית במערכת השמורה {user_system}")
+        user_system, password = saved_system, saved_password
     else:
-        # אם אין מערכת שמורה, פשוט שואל ולא שומר כלום!
         if not user_system:
-            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10)
+            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10, "Any")
         if not password:
-            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10)
+            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10, "Any")
 
-    # שאר הפרמטרים
     extension = request.values.get('extension')
     say_length = request.values.get('say_length')
     play_beep = request.values.get('play_beep')
@@ -337,7 +276,6 @@ def create_playfile():
             return ym_say_and_go_back("t-שגיאה השלוחה ריקה")
 
         token = f"{user_system.strip()}:{password.strip()}"
-
         say_length_value = "say_length=yes" if say_length == "1" else "playfile_say_length_if=5" if say_length == "2" else "say_length=no"
         beep_line = "play_beep=no" if play_beep == "1" else ""
         order_line = "start=min" if play_order == "1" else ""
@@ -375,28 +313,203 @@ after_play=return
 """
         ext_ini = "\n".join([line for line in ext_ini.splitlines() if line.strip()])
 
-        r1 = requests.get(
-            f"{YEMOT_API_URL}UpdateExtension",
-            params={"token": token, "path": f"ivr2:{clean_ext}", "type": "playfile"},
-            timeout=15
-        )
-        logging.info(f"UpdateExtension: {r1.status_code} - {r1.text}")
-
+        r1 = requests.get(f"{YEMOT_API_URL}UpdateExtension", params={"token": token, "path": f"ivr2:{clean_ext}", "type": "playfile"}, timeout=15)
         if not (r1.status_code == 200 and '"responseStatus":"OK"' in r1.text):
             return ym_say_and_go_back("t-שגיאה ביצירת השלוחה")
 
-        r2 = requests.post(
-            f"{YEMOT_API_URL}UploadTextFile",
-            params={"token": token, "what": f"ivr2:/{clean_ext}/ext.ini", "contents": ext_ini},
-            timeout=15
-        )
-        logging.info(f"UploadTextFile: {r2.status_code} - {r2.text}")
-
+        r2 = requests.post(f"{YEMOT_API_URL}UploadTextFile", params={"token": token, "what": f"ivr2:/{clean_ext}/ext.ini", "contents": ext_ini}, timeout=15)
         if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
-            return ym_say_and_go_back(f"t- השלוחה הוגדרה בהצלחה במיקום  {clean_ext} נוצרה בהצלחה ")
+            return ym_say_and_go_back(f"t-השלוחה הוגדרה בהצלחה במיקום {clean_ext}")
         else:
             return ym_say_and_go_back("t-שגיאה בהעלאת התפריט")
+    except Exception as e:
+        logging.exception("שגיאה")
+        return ym_say_and_go_back("t-שגיאה טכנית")
 
+# ---------- שלוחה 4: יצירת שלוחת הקלטה ----------
+@app.route('/create-record', methods=['GET', 'POST'])
+def create_record():
+    cli = request.values.get('ApiPhone')
+    user_system = request.values.get('user_system')
+    password = request.values.get('password')
+    
+    saved_system, saved_password = get_user_credentials(cli)
+    if saved_system and saved_password:
+        user_system, password = saved_system, saved_password
+    else:
+        if not user_system:
+            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10, "Any")
+        if not password:
+            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10, "Any")
+
+    extension = request.values.get('extension')
+    title = request.values.get('title')
+    folder_move_choice = request.values.get('folder_move_choice')
+    folder_move_path = request.values.get('folder_move_path')
+    record_end_goto = request.values.get('record_end_goto')
+    record_cancel_goto = request.values.get('record_cancel_goto')
+    list_tzintuk = request.values.get('list_tzintuk')
+    say_record_number = request.values.get('say_record_number')
+    say_record_menu = request.values.get('say_record_menu')
+    email_send = request.values.get('email_send')
+    email_address = request.values.get('email_address')
+    hangup_insert_file = request.values.get('hangup_insert_file')
+    set_record_name = request.values.get('set_record_name')
+    record_title = request.values.get('record_title')
+    record_stop_any_key = request.values.get('record_stop_any_key')
+    enter_id = request.values.get('enter_id')
+    hard_link = request.values.get('hard_link')
+    copy_record_link = request.values.get('copy_record_link')
+
+    # 1. שלוחה
+    if not extension:
+        return ym_read("extension", "t-אנא הקישו את מספר השלוחה החדשה ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
+
+    # 2. כותרת
+    if not title:
+        return ym_read("title", "t-אנא הקישו כותרת לשלוחה ובסיום הקישו סולמית", 30, "Any")
+
+    # 3. מיקום ההקלטה
+    if folder_move_choice is None:
+        return ym_read("folder_move_choice", "t-לאן להעביר את ההקלטה? לשלוחה מסוימת הקישו 1 לשהייה כאן הקישו 2 לתיבה אישית הקישו 3 לבחירה בזמן הקלטה הקישו 4", 1)
+
+    if folder_move_choice == "1":
+        if not folder_move_path:
+            return ym_read("folder_move_path", "t-הקישו את מספר שלוחת היעד ובסיום סולמית", 10)
+        folder_move_value = f"/{folder_move_path.strip().replace('*', '/')}"
+    elif folder_move_choice == "2":
+        folder_move_value = "this_folder"
+    elif folder_move_choice == "3":
+        folder_move_value = "id"
+    else:
+        folder_move_value = "tfr"
+
+    # 4. ניתוב בסיום (ברירת מחדל)
+    if record_end_goto is None:
+        return ym_read("record_end_goto", "t-ברירת המחדל של המערכת בסיום ההקלטה משמיע למאזין תפריט אישור ביטול והקלטה מחדש להמשך כברירת מחדל הקישו 0 להגדרה שבסיום ההקלטה ההקלטה תשמר מיידית הקישו 1", 1)
+    end_goto_value = ""
+    if record_end_goto == "1":
+        if not request.values.get('record_end_goto_path'):
+            return ym_read("record_end_goto_path", "t-הקישו את שלוחת היעד בסיום ובסיום סולמית", 10)
+        end_goto_value = f"/{request.values.get('record_end_goto_path').strip().replace('*', '/')}"
+
+    # 5. ניתוב בביטול (ברירת מחדל)
+    if record_cancel_goto is None:
+        return ym_read("record_cancel_goto", "t-ברירת המחדל של המערכת בביטול ההקלטה חוזר לתפריט הקודם להמשך ללא שינוי הקישו 0 להגדרה שבביטול ההקלטה יעבור לשלוחה מסוימת הקישו 1", 1)
+    cancel_goto_value = ""
+    if record_cancel_goto == "1":
+        if not request.values.get('record_cancel_goto_path'):
+            return ym_read("record_cancel_goto_path", "t-הקישו את שלוחת הביטול ובסיום סולמית", 10)
+        cancel_goto_value = f"/{request.values.get('record_cancel_goto_path').strip().replace('*', '/')}"
+
+    # 6. צינתוק (אופציונלי)
+    if list_tzintuk is None:
+        return ym_read("list_tzintuk", "t-האם ברצונך לשלוח צינתוק על הקלטה חדשה? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    tzintuk_value = ""
+    if list_tzintuk == "1":
+        if not request.values.get('list_tzintuk_name'):
+            return ym_read("list_tzintuk_name", "t-הקישו את שם רשימת הצינתוקים ובסיום סולמית", 20, "Any")
+        tzintuk_value = request.values.get('list_tzintuk_name').strip()
+
+    # 7. השמעת מספר הקלטה (ברירת מחדל)
+    if say_record_number is None:
+        return ym_read("say_record_number", "t-ברירת המחדל של המערכת משמיע את מספר ההקלטה לפני ההשמעה להמשך ללא שינוי הקישו 0 להגדרה שלא להשמיע את מספר ההקלטה הקישו 1", 1)
+    say_record_number_value = "no" if say_record_number == "1" else "yes"
+
+    # 8. השמעת תפריט אחרי הקלטה (ברירת מחדל)
+    if say_record_menu is None:
+        return ym_read("say_record_menu", "t-ברירת המחדל של המערכת בסיום ההקלטה משמיע למאזין תפריט אישור ביטול והקלטה מחדש להמשך כברירת מחדל הקישו 0 להגדרה שבסיום ההקלטה ההקלטה תשמר מיידית הקישו 1", 1)
+    say_record_menu_value = "no" if say_record_menu == "1" else "yes"
+
+    # 9. שליחה למייל (אופציונלי)
+    if email_send is None:
+        return ym_read("email_send", "t-האם ברצונך שההקלטה תשלח למייל שלכם? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    email_send_value, email_address_value = "", ""
+    if email_send == "1":
+        if not email_address:
+            return ym_read("email_address", "t-הקישו את כתובת המייל ובסיום סולמית", 50, "Any")
+        email_send_value = "yes"
+        email_address_value = email_address.strip()
+
+    # 10. שמירה בניתוק (אופציונלי)
+    if hangup_insert_file is None:
+        return ym_read("hangup_insert_file", "t-האם ברצונך לשמור את ההקלטה גם אם המשתמש מנתק? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    hangup_insert_value = "yes" if hangup_insert_file == "1" else ""
+
+    # 11. בחירת שם קובץ (אופציונלי)
+    if set_record_name is None:
+        return ym_read("set_record_name", "t-האם ברצונך לאפשר למקליט לבחור שם קובץ? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    set_record_name_value = "yes" if set_record_name == "1" else ""
+
+    # 12. הקלטת כותרת (אופציונלי)
+    if record_title is None:
+        return ym_read("record_title", "t-האם ברצונך להקליט כותרת לפני ההקלטה? תמיד הקישו 1 עם תפריט הקישו 2 אחרת הקישו 0", 1)
+    record_title_value = "yes" if record_title == "1" else "tfr" if record_title == "2" else ""
+
+    # 13. עצירה בכל מקש (אופציונלי)
+    if record_stop_any_key is None:
+        return ym_read("record_stop_any_key", "t-האם ברצונך לעצור את ההקלטה בכל מקש? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    stop_any_key_value = "yes" if record_stop_any_key == "1" else ""
+
+    # 14. זיהוי משתמש (אופציונלי)
+    if enter_id is None:
+        return ym_read("enter_id", "t-האם ברצונך להפעיל זיהוי משתמש לפי טלפון? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    enter_id_value = "yes" if enter_id == "1" else ""
+
+    # 15. קישור קשיח (אופציונלי)
+    if hard_link is None:
+        return ym_read("hard_link", "t-האם ברצונך ליצור קישור קשיח להקלטה? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    hard_link_value = "yes" if hard_link == "1" else ""
+
+    # 16. העתקה לשלוחה נוספת (אופציונלי)
+    if copy_record_link is None:
+        return ym_read("copy_record_link", "t-האם ברצונך להעתיק את ההקלטה לשלוחה נוספת? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    copy_link_value = ""
+    if copy_record_link == "1":
+        if not request.values.get('copy_record_link_path'):
+            return ym_read("copy_record_link_path", "t-הקישו את שלוחת ההעתקה ובסיום סולמית", 10)
+        copy_link_value = f"/{request.values.get('copy_record_link_path').strip().replace('*', '/')}"
+
+    # ===================== יצירת השלוחה =====================
+    try:
+        clean_ext = extension.strip().replace('*', '/').replace('-', '/').strip('/')
+        if not clean_ext:
+            return ym_say_and_go_back("t-שגיאה השלוחה ריקה")
+
+        token = f"{user_system.strip()}:{password.strip()}"
+        
+        lines = ["type=record", f"title={title.strip()}", f"folder_move={folder_move_value}"]
+        if end_goto_value: lines.append(f"record_end_goto={end_goto_value}")
+        if cancel_goto_value: lines.append(f"record_cancel_goto={cancel_goto_value}")
+        if tzintuk_value:
+            lines.append(f"list_tzintuk={tzintuk_value}")
+            lines.append("record_end_run_tzintuk=yes")
+        lines.append(f"say_record_number={say_record_number_value}")
+        lines.append(f"say_record_menu={say_record_menu_value}")
+        if email_send_value:
+            lines.append(f"email_send={email_send_value}")
+            lines.append(f"email_address={email_address_value}")
+        if hangup_insert_value: lines.append(f"hangup_insert_file={hangup_insert_value}")
+        if set_record_name_value: lines.append(f"set_record_name={set_record_name_value}")
+        if record_title_value: lines.append(f"record_title={record_title_value}")
+        if stop_any_key_value: lines.append(f"record_stop_any_key={stop_any_key_value}")
+        if enter_id_value:
+            lines.append(f"enter_id={enter_id_value}")
+            lines.append("enter_id_type=phone")
+        if hard_link_value: lines.append(f"hard_link={hard_link_value}")
+        if copy_link_value: lines.append(f"copy_record_link={copy_link_value}")
+
+        ext_ini = "\n".join(lines)
+
+        r1 = requests.get(f"{YEMOT_API_URL}UpdateExtension", params={"token": token, "path": f"ivr2:{clean_ext}", "type": "record"}, timeout=15)
+        if not (r1.status_code == 200 and '"responseStatus":"OK"' in r1.text):
+            return ym_say_and_go_back("t-שגיאה ביצירת השלוחה")
+
+        r2 = requests.post(f"{YEMOT_API_URL}UploadTextFile", params={"token": token, "what": f"ivr2:/{clean_ext}/ext.ini", "contents": ext_ini}, timeout=15)
+        if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
+            return ym_say_and_go_back(f"t-שלוחת ההקלטה {clean_ext} נוצרה בהצלחה")
+        else:
+            return ym_say_and_go_back("t-השלוחה נוצרה אך התפריט לא נטען")
     except Exception as e:
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
