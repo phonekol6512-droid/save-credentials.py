@@ -67,10 +67,9 @@ def ym_response(content: str):
     res.headers["Content-Type"] = "text/plain; charset=utf-8"
     return res
 
-# כאן השינוי: הוספת פרמטר min_digits=1 וטיפול נכון בשאלות של ספרה אחת
+# תיקון: timeout=1 במקום 12 כדי ששאלות של ספרה אחת יעברו מיד
 def ym_read(var_name: str, prompt: str, max_digits=1, input_type="Digits"):
-    # אם max_digits=1, נגדיר min_digits=1 כדי שזה יעבור מיד ללא סולמית
-    return ym_response(f"read={prompt}={var_name},{max_digits},12,1,{input_type}")
+    return ym_response(f"read={prompt}={var_name},{max_digits},1,1,{input_type}")
 
 def ym_say_and_go_back(text: str):
     return ym_response(f"id_list_message={text}")
@@ -480,9 +479,17 @@ def create_record():
         token = f"{user_system.strip()}:{password.strip()}"
         
         lines = ["type=record", "title=שלוחת הקלטה נבנה באמצעות מגדיר פון", f"folder_move={folder_move_value}"]
-        if end_goto_value: lines.append(f"record_end_goto={end_goto_value}")
+        
+        # תיקון: אם אין יעד סיום, מגדירים ניתוק במקום לחזור לתפריט
+        if end_goto_value:
+            lines.append(f"record_end_goto={end_goto_value}")
+        else:
+            lines.append("record_end_goto=/hangup")
+            
         if cancel_goto_value: lines.append(f"record_cancel_goto={cancel_goto_value}")
-        lines.append(f"say_record_menu={say_record_menu_value}")
+        
+        # תיקון: מבטלים את תפריט האישור כברירת מחדל
+        lines.append("say_record_menu=no")
         lines.append(f"say_record_number={say_record_number_value}")
         
         # אופציונליים
