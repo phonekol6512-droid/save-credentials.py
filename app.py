@@ -84,26 +84,26 @@ def manage_credentials():
     saved_system, saved_password = get_user_credentials(cli)
 
     if saved_system and saved_password and manage_action is None:
-        return ym_read("manage_action", f"t-מערכת {saved_system} שמורה להחלפה הקש 1 למחיקה הקש 2 ליציאה הקש 0", 1)
+        return ym_read("manage_action", f"t-מספר מערכת {saved_system} שמור בתור המערכת הקבועה שלכם לעדכון המספר של המערכת או להחלפת המערכת  הקש 1 למחיקת מספר המערכת שלכם והסיסמה הקש 2 ליציאה הקש 0", 1)
 
     if manage_action == "2":
         delete_user_credentials(cli)
-        return ym_say_and_go_back("t-המערכת נמחקה בהצלחה")
+        return ym_say_and_go_back("t-מספר המערכת שלכם והסיסמה נמחק בהצלחה")
 
     if manage_action == "0":
-        return ym_say_and_go_back("t-ללא שינוי")
+        return ym_say_and_go_back("t-הנכם מועברים לתפריט הקודם")
 
     if not user_system:
-        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10, "Any")
+        return ym_read("user_system", "t-הגדרת המערכת הקבועה שלכם, שימו לב מספר המערכת והסיסמה שלכם נשמרים בשרת מאובטח בכל זאת תמיד תוכלו למחוק את הפרטים ולעדכן אותם, הנכם מועברים להגדרת המערכת הקבועה שלכם, אנא הקישו את מספר המערכת שלכם ובסיום הקישו סולמית", 10, "Any")
     if not password:
-        return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10, "Any")
+        return ym_read("password", "t-אנא הקישו את סיסמת המערכת שלכם ובסיום הקישו סולמית", 10, "Any")
 
     if 'user_system' in request.values and user_system:
         save_field(cli, 'system', user_system.strip())
     if 'password' in request.values and password:
         save_field(cli, 'password', password.strip())
 
-    return ym_say_and_go_back("t-הפרטים נשמרו בהצלחה")
+    return ym_say_and_go_back("t-הפרטים נשמרו בהצלחה מעתה בכל פעם שתגדירו מודול תועברו ישירות רק להקשת מספר השלוחה")
 
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
