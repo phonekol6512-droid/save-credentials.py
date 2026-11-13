@@ -542,7 +542,7 @@ def active_calls():
     # שליפת המערכת והסיסמה השמורות (המערכת של המשתמש שהתקשר)
     saved_system, saved_password = get_user_credentials(cli)
     if not saved_system or not saved_password:
-        return ym_say_and_go_back("t-לא נמצאו פרטי מערכת שמורים. אנא הגדירו את המערכת בשלוחת הניהול")
+        return ym_say_and_go_back("t-לא נמצאו פרטי מערכת שמורים אנא הגדירו את המערכת בשלוחת הניהול")
 
     token = f"{saved_system}:{saved_password}"
 
@@ -564,7 +564,7 @@ def active_calls():
     # סינון השיחה הנוכחית של המשתמש מתוך הרשימה (כדי לא לנתק אותו!)
     other_calls = [c for c in calls if c.get('callId') != current_call_id]
 
-    # אם התקבלה בקשת ניתוק
+    # אם התקבלה בקשת ניתוק (המשתמש הקיש 1)
     if action == "1":
         if not other_calls:
             return ym_say_and_go_back("t-אין שיחות אחרות לנתק")
@@ -584,30 +584,32 @@ def active_calls():
                 )
                 disconnected_count += 1
                 
-        return ym_say_and_go_back(f"t-נותקו {disconnected_count} שיחות בהצלחה. להתראות")
+        return ym_say_and_go_back(f"t-נותקו {disconnected_count} שיחות בהצלחה להתראות")
 
     if action == "0":
-        return ym_say_and_go_back("t-ללא שינוי. להתראות")
+        return ym_say_and_go_back("t-ללא שינוי להתראות")
 
     # אם אין שיחות אחרות מלבד השיחה של המשתמש עצמו
     if not other_calls:
         return ym_say_and_go_back("t-אין שיחות פעילות אחרות במערכת כרגע")
 
     # בניית ההודעה עם מספרי הטלפון (מוגבל ל-5)
+    # שים לב: ללא נקודות או פסיקים!
     phone_list = []
     for i, call in enumerate(other_calls[:5], 1):
         phone = call.get('phone', 'לא ידוע')
-        phone_list.append(f"שיחה {i}: {phone}")
+        phone_list.append(f"שיחה {i} במספר {phone}")
     
     if len(other_calls) > 5:
         phone_list.append(f"ועוד {len(other_calls) - 5} שיחות נוספות")
         
-    phones_text = ". ".join(phone_list)
+    phones_text = " ".join(phone_list)
     count = len(other_calls)
     
+    # הודעה ללא פסיקים כדי לא לשבור את פקודת ה-read
     return ym_read(
         "action",
-        f"t-כרגע יש {count} שיחות פעילות אחרות. {phones_text}. לניתוק כל השיחות הקש 1, לחזור הקש 0",
+        f"t-כרגע יש {count} שיחות פעילות אחרות {phones_text} לניתוק כל השיחות הקש 1 או לחזור הקש 0",
         1
     )
 
