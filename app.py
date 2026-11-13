@@ -572,12 +572,12 @@ def active_calls():
     # ================= טיפול בהעברה לשלוחה =================
     if state['mode'] == 'wait_transfer_ext':
         transfer_ext = request.values.get('transfer_ext')
-        if transfer_ext and transfer_ext.strip() != "*":
+        if transfer_ext and transfer_ext.strip() not in ["*", "0"]:
             clean_ext = transfer_ext.strip().replace('*', '/').replace('-', '/').strip('/')
             call_id_to_transfer = state.get('current_call_id')
             if call_id_to_transfer:
-                # ביצוע העברה דרך ה-API
-                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer:{clean_ext}"}, timeout=5)
+                # ביצוע העברה דרך ה-API - התיקון הקריטי!
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"set:GOasap=/{clean_ext}"}, timeout=5)
                 logging.info(f"Transfer {call_id_to_transfer} to {clean_ext}: {res.text}")
                 just_disconnected.add(call_id_to_transfer)
                 other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
@@ -585,7 +585,7 @@ def active_calls():
             state['mode'] = 'sub'
             action = "3" # עובר אוטומטית להצגת השיחה הבאה (כי עכשיו 3 זה הבא)
         else:
-            # ביטול (הוקש כוכבית או כלום)
+            # ביטול (הוקש כוכבית או 0)
             state['mode'] = 'sub'
             action = "3" # עובר אוטומטית להצגת השיחה הבאה
 
