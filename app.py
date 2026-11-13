@@ -576,19 +576,12 @@ def active_calls():
             call_id_to_transfer = state.get('current_call_id')
             
             if call_id_to_transfer:
-                # התיקון: שימוש ב-transfer={ext} להעברה חיה
-                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer={clean_ext}"}, timeout=5)
-                logging.info(f"Transfer {call_id_to_transfer} to {clean_ext}: {res.text}")
+                # התיקון הקריטי: שימוש ב-set:GOasap=/<ext> להעברת שיחה חיה
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"set:GOasap=/{clean_ext}"}, timeout=5)
+                logging.info(f"Transfer {call_id_to_transfer} to /{clean_ext}: {res.text}")
                 if '"responseStatus":"OK"' in res.text:
                     just_disconnected.add(call_id_to_transfer)
                     other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
-                else:
-                    # Fallback ל-set:GOasap אם transfer נכשל
-                    res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"set:GOasap=/{clean_ext}"}, timeout=5)
-                    logging.info(f"Fallback set:GOasap {call_id_to_transfer} to /{clean_ext}: {res.text}")
-                    if '"responseStatus":"OK"' in res.text:
-                        just_disconnected.add(call_id_to_transfer)
-                        other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
             
             state['mode'] = 'sub'
             action = "3" # עובר אוטומטית להצגת השיחה הבאה
@@ -607,7 +600,7 @@ def active_calls():
                 call_states[cli] = {'mode': 'main', 'current_call_id': None}
                 return ym_response(f"id_list_message=t-אין כרגע אף מספר מחובר למערכת\nend=true")
             
-            msg = f"t-מחוברים כרגע למערכת {total_count} מספרים שונים לשמיעת המספרים האחרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
+            msg = f"t-מספר המאזינים שמחוברים כרגע למערכת הוא  {total_count} מספרים שונים, לשמיעת המספרים זמן ההאזנה למערכת ובאיזה שלוחה הם נמצאים ולנהל אותם הקש 1  לניתוק כל המספרים המחוברים כרגע למערכת הקש 3 ליציאה הקש 0"
             return ym_read("action", msg, 1)
 
         if action == "3":
@@ -648,7 +641,7 @@ def active_calls():
         if action == "1":
             # בקשת העברה לשלוחה
             state['mode'] = 'wait_transfer_ext'
-            return ym_read("transfer_ext", "t-אנא הקישו את מספר השלוחה אליה תרצו להעביר את השיחה ובסיום הקישו סולמית", 10)
+            return ym_read("transfer_ext", "t-אנא הקישו את מספר השלוחה אליה תרצו להעביר את השיחה ובסיום הקישו סולמית שים לב, הפעולה תתבצע במעבר הראשון של הלקוח במערכת ולא תתבצע מיידית", 10)
 
         if action == "3":
             # מציאת השיחה הבאה בתור
@@ -674,7 +667,7 @@ def active_calls():
             duration = next_call.get('duration', 0)
             path = next_call.get('path') or "לא ידועה"
 
-            msg = f"t-המספר {phone} מחובר {duration} שניות ונמצא בשלוחה {path} להעברה לשלוחה אחרת הקש 1 לניתוק הקש 2 לשמיעת המספר הבא הקש 3 ליציאה הקש 0"
+            msg = f"t-המספר {phone} מחובר {duration} שניות ונמצא בשלוחה {path} להעברת המאזין לשלוחה אחרת הקש 1 לניתוק השיחה הקש 2 למעבר למספר הבא הקש 3 ליציאה הקש 0"
             return ym_read("action", msg, 1)
 
     call_states[cli] = {'mode': 'main', 'current_call_id': None}
