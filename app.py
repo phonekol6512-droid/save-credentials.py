@@ -276,7 +276,9 @@ def create_playfile():
             return ym_say_and_go_back("t-שגיאה השלוחה ריקה")
 
         token = f"{user_system.strip()}:{password.strip()}"
-        say_length_value = "say_length=yes" if say_length == "1" else "playfile_say_length_if=5" if say_length == "2" else "say_length=no"
+        
+        # תיקון: אם בחר 0, לא כותבים כלום (ריק)
+        say_length_value = "say_length=yes" if say_length == "1" else "playfile_say_length_if=5" if say_length == "2" else ""
         beep_line = "play_beep=no" if play_beep == "1" else ""
         order_line = "start=min" if play_order == "1" else ""
         files_amount_line = "say_files_amount=yes" if say_files_amount == "1" else ""
@@ -379,7 +381,7 @@ def create_record():
         folder_move_value = "tfr"
 
     if record_end_goto is None:
-        return ym_read("record_end_goto", "t-ברירת המחדל של המערכת בסיום ההקלטה משמיע למאזין תפריט אישור ביטול והקלטה מחדש להמשך כברירת מחדל הקישו 0 להגדרה שבסיום ההקלטה ההקלטה תשמר מיידית הקישו 1", 1)
+        return ym_read("record_end_goto", "t-לאן לעבור בסיום ההקלטה? לחזור לתפריט הקודם הקש 0 לעבור לשלוחה אחרת הקש 1", 1)
     end_goto_value = ""
     if record_end_goto == "1":
         if not request.values.get('record_end_goto_path'):
@@ -395,19 +397,21 @@ def create_record():
         cancel_goto_value = f"/{request.values.get('record_cancel_goto_path').strip().replace('*', '/')}"
 
     if say_record_menu is None:
-        return ym_read("say_record_menu", "t-ברירת המחדל של המערכת בסיום ההקלטה משמיע למאזין תפריט אישור ביטול והקלטה מחדש להמשך כברירת מחדל הקישו 0 להגדרה שבסיום ההקלטה ההקלטה תשמר מיידית הקישו 1", 1)
-    say_record_menu_value = "no" if say_record_menu == "1" else "yes"
+        return ym_read("say_record_menu", "t-האם להשמיע תפריט אישור וביטול בסיום ההקלטה? להשאיר כברירת מחדל הקש 0 להשבית את התפריט הקש 1", 1)
+    # תיקון: אם בחר 0 (ברירת מחדל), לא כותבים כלום
+    say_record_menu_value = "no" if say_record_menu == "1" else ""
 
     if say_record_number is None:
         return ym_read("say_record_number", "t-ברירת המחדל של המערכת משמיע את מספר ההקלטה לפני ההשמעה להמשך ללא שינוי הקישו 0 להגדרה שלא להשמיע את מספר ההקלטה הקישו 1", 1)
-    say_record_number_value = "no" if say_record_number == "1" else "yes"
+    # תיקון: אם בחר 0 (ברירת מחדל), לא כותבים כלום
+    say_record_number_value = "no" if say_record_number == "1" else ""
 
     if email_send is None:
         return ym_read("email_send", "t-האם ברצונך שההקלטה תשלח למייל שלכם? להגדרה הקישו 1 אחרת הקישו 0", 1)
     email_send_value, email_address_value = "", ""
     if email_send == "1":
         if not email_address:
-            return ym_read("email_address", "t-אנא הקישו את כתובת המייל באנגלית ובסיום הקישו סולמית", 50, "English")
+            return ym_read("email_address", "t-אנא הקישו את כתובת המייל באנגלית ובסיום הקישו סולמית", 50, "EmailKeyboard")
         email_send_value = "yes"
         email_address_value = email_address.strip()
 
@@ -460,15 +464,20 @@ def create_record():
         
         lines = ["type=record", "title=שלוחת הקלטה נבנה באמצעות מגדיר פון", f"folder_move={folder_move_value}"]
         
+        # תיקון: אם end_goto_value ריק (בחר 0), לא כותבים כלום
         if end_goto_value:
             lines.append(f"record_end_goto={end_goto_value}")
-        else:
-            lines.append("record_end_goto=hangup")
             
-        if cancel_goto_value: lines.append(f"record_cancel_goto={cancel_goto_value}")
+        if cancel_goto_value: 
+            lines.append(f"record_cancel_goto={cancel_goto_value}")
         
-        lines.append("say_record_menu=no")
-        lines.append(f"say_record_number={say_record_number_value}")
+        # תיקון: רק אם המשתמש בחר להשבית (1), כותבים say_record_menu=no
+        if say_record_menu_value == "no":
+            lines.append("say_record_menu=no")
+            
+        # תיקון: רק אם המשתמש בחר להשבית (1), כותבים say_record_number=no
+        if say_record_number_value == "no":
+            lines.append("say_record_number=no")
         
         if email_send_value:
             lines.append(f"email_send={email_send_value}")
