@@ -557,6 +557,8 @@ def active_calls():
             return ym_say_and_go_back("t-שגיאה בשליפת השיחות הפעילות")
         
         calls = data.get('calls', [])
+        # לוג כדי לראות את המבנה האמיתי של השיחות
+        logging.info(f"GetIncomingCalls data: {json.dumps(calls, ensure_ascii=False)}")
     except Exception as e:
         logging.exception("שגיאה ב-GetIncomingCalls")
         return ym_say_and_go_back("t-שגיאה טכנית בשליפת השיחות")
@@ -571,9 +573,12 @@ def active_calls():
             
         disconnected_count = 0
         for call in other_calls:
-            call_id = call.get('callId')
+            # חילוץ ה-ID של השיחה (אולי זה נקרא 'id' ולא 'callId')
+            call_id = call.get('callId') or call.get('id')
+            
             if call_id:
-                requests.get(
+                # לוג כדי לראות את תגובת ימות לניתוק
+                res = requests.get(
                     f"{YEMOT_API_URL}CallAction",
                     params={
                         "token": token,
@@ -582,6 +587,7 @@ def active_calls():
                     },
                     timeout=5
                 )
+                logging.info(f"CallAction for {call_id}: {res.status_code} - {res.text}")
                 disconnected_count += 1
                 
         return ym_say_and_go_back(f"t-נותקו {disconnected_count} שיחות בהצלחה להתראות")
@@ -594,10 +600,10 @@ def active_calls():
         return ym_say_and_go_back("t-אין שיחות פעילות אחרות במערכת כרגע")
 
     # בניית ההודעה עם מספרי הטלפון (מוגבל ל-5)
-    # שים לב: ללא נקודות או פסיקים!
     phone_list = []
     for i, call in enumerate(other_calls[:5], 1):
-        phone = call.get('phone', 'לא ידוע')
+        # ניסיון חכם לשלוף את מספר הטלפון מכל מיני שמות אפשריים
+        phone = call.get('phone') or call.get('callerId') or call.get('caller') or call.get('ApiPhone') or call.get('number') or 'לא ידוע'
         phone_list.append(f"שיחה {i} במספר {phone}")
     
     if len(other_calls) > 5:
