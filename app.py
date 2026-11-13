@@ -529,7 +529,6 @@ def create_record():
         return ym_say_and_go_back("t-שגיאה טכנית")
 
 # ---------- שלוחה 5: ניהול שיחות פעילות ----------
-# מילון לניהול מצב השיחה (האם אנחנו בתפריט הראשי או בתת-תפריט, ומה ה-ID של השיחה המוצגת)
 call_states = {}
 just_disconnected = set()
 
@@ -576,22 +575,22 @@ def active_calls():
             clean_ext = transfer_ext.strip().replace('*', '/').replace('-', '/').strip('/')
             call_id_to_transfer = state.get('current_call_id')
             if call_id_to_transfer:
-                # ביצוע העברה דרך ה-API - התיקון הקריטי!
-                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"set:GOasap=/{clean_ext}"}, timeout=5)
+                # התיקון: שימוש ב-transfer= להעברת שיחה חיה
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer={clean_ext}"}, timeout=5)
                 logging.info(f"Transfer {call_id_to_transfer} to {clean_ext}: {res.text}")
                 just_disconnected.add(call_id_to_transfer)
                 other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
             
             state['mode'] = 'sub'
-            action = "3" # עובר אוטומטית להצגת השיחה הבאה (כי עכשיו 3 זה הבא)
+            action = "3"
         else:
             # ביטול (הוקש כוכבית או 0)
             state['mode'] = 'sub'
-            action = "3" # עובר אוטומטית להצגת השיחה הבאה
+            action = "3"
 
     # ================= תפריט ראשי =================
     if state['mode'] == 'main':
-        just_disconnected.clear()  # איפוס הניתוקים בכל כניסה לתפריט הראשי
+        just_disconnected.clear()
         
         if action is None:
             state['current_call_id'] = None
@@ -618,7 +617,7 @@ def active_calls():
 
         if action == "1":
             state['mode'] = 'sub'
-            action = "3" # מפעיל את הצגת השיחה הראשונה (כי עכשיו 3 זה הבא/הצגה)
+            action = "3"
 
     # ================= תת תפריט =================
     if state['mode'] == 'sub':
@@ -633,10 +632,9 @@ def active_calls():
                 res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_disconnect, "action": "hangup"}, timeout=5)
                 logging.info(f"Disconnect {call_id_to_disconnect}: {res.text}")
                 just_disconnected.add(call_id_to_disconnect)
-                # הסרת השיחה מהרשימה המקומית כדי שנוכל לעבור לבאה בתור
                 other_calls = [c for c in other_calls if c.get('id') != call_id_to_disconnect]
             
-            action = "3" # מפעיל את הצגת השיחה הבאה בתור (כי עכשיו 3 זה הבא)
+            action = "3"
 
         if action == "1":
             # בקשת העברה לשלוחה
