@@ -528,22 +528,18 @@ def create_record():
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
 
-# ---------- שלוחה 5: ניהול שיחות פעילות (השלוחה שלך) ----------
-# מילון לשמירת מצב התפריט בין קריאות (State)
-call_states = {}
 
-@app.route('/active-calls', methods=['GET', 'POST'])
+# ---------- שלוחה 5: ניהול שיחות פעילות (השלוחה שלך, לא של המשתמש) ----------
+@app.route('/active-calls', methods=['GET', 'POST'], strict_slashes=False)
 def active_calls():
     if request.values.get('hangup') == 'yes':
         return ""
 
     cli = request.values.get('ApiPhone')
-    action = request.values.get('action')
     
-    # אתחול מצב התפריט אם לא קיים
-    if cli not in call_states:
-        call_states[cli] = {'menu': 'main', 'index': 0}
-    state = call_states[cli]
+    # תיקון: שליפת ההקשה האחרונה (העדכנית ביותר) מתוך השרשרת
+    actions = request.values.getlist('action')
+    action = actions[-1] if actions else None
 
     saved_system, saved_password = get_user_credentials(cli)
     if not saved_system or not saved_password:
@@ -569,65 +565,57 @@ def active_calls():
     other_calls = [c for c in calls if c.get('callerIdNum') != cli]
 
     # ================= תפריט ראשי =================
-    if state['menu'] == 'main':
-        if action is None:
-            msg = f"t-המספר שלך הוא {cli} מחוברים כרגע למערכת {len(other_calls)} מספרים שונים לשמיעת כל המספרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
-            return ym_read("action", msg, 1)
+    if action is None or action == "menu":
+        count = len(other_calls)
+        if count == 0:
+            return ym_response(f"id_list_message=t-המספר שלך הוא {cli} אין כרגע מספרים אחרים מחוברים למערכת\nend=true")
         
-        if action == "0":
-            del call_states[cli]
-            return ym_response("id_list_message=t-להתראות\nend=true")
-        
-        if action == "3":
-            if not other_calls:
-                del call_states[cli]
-                return ym_response("id_list_message=t-אין מספרים אחרים לנתק\nend=true")
-            for call in other_calls:
-                call_id = call.get('id')
-                if call_id:
-                    requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id, "action": "set:GOasap=hangup"}, timeout=5)
-            del call_states[cli]
-            return ym_response(f"id_list_message=t-נותקו {len(other_calls)} מספרים בהצלחה\nend=true")
+        msg = f"t-המספר שלך הוא {cli} מחוברים כרגע למערכת {count} מספרים שונים לשמיעת המספרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
+        return ym_read("action", msg, 1)
 
-        if action == "1":
-            state['menu'] = 'sub'
-            state['index'] = 0
-            # ממשיך ללוגיקה של תת התפריט למטה
+    # ================= ניתוק כללי (action=3) =================
+    if action == "3":
+        if not other_calls:
+            return ym_response(f"id_list_message=t-אין מספרים אחרים לנתק\nend=true")
+            
+        disconnected_count = 0
+        for call in other_calls:
+            call_id = call.get('id')
+            if call_id:
+                requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id, "action": "set:GOasap=hangup"}, timeout=5)
+                disconnected_count += 1
+                
+        return ym_response(f"id_list_message=t-נותקו {disconnected_count} מספרים בהצלחה להתראות\nend=true")
 
-    # ================= תת תפריט - רשימת המספרים =================
-    if state['menu'] == 'sub':
-        if action == "0": # יציאה לתפריט הראשי
-            state['menu'] = 'main'
-            msg = f"t-המספר שלך הוא {cli} מחוברים כרגע למערכת {len(other_calls)} מספרים שונים לשמיעת כל המספרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
-            return ym_read("action", msg, 1)
+    # ================= יציאה (action=0) =================
+    if action == "0":
+        return ym_response("id_list_message=t-להתראות\nend=true")
 
-        if action == "2": # המספר הבא
-            state['index'] += 1
+    # ================= תת תפריט - שמיעת מספרים (action=1 או 2) =================
+    if action in ["1", "2"]:
+        # תיקון: מניעת דריסת אינדקסים על ידי שימוש בפרמטר נסתר או פשוט חישוב מחדש
+        # נשתמש בפרמטר call_index אם הוא קיים, אחרת נתחיל מ-0 (אם הוקש 1 בתפריט הראשי)
+        call_indexes = request.values.getlist('call_index')
+        call_index = int(call_indexes[-1]) if call_indexes else 0
 
-        if action == "1": # ניתוק המספר הנוכחי
-            if state['index'] < len(other_calls):
-                target_call = other_calls[state['index']]
-                call_id = target_call.get('id')
-                if call_id:
-                    requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id, "action": "set:GOasap=hangup"}, timeout=5)
-                    # מוציאים את השיחה מהרשימה כדי שהאינדקס לא ידלג
-                    other_calls.pop(state['index'])
+        # אם הוקש 1 בתפריט הראשי, מתחילים מהתחלה
+        if action == "1" and call_index == 0:
+            call_index = 0
+        # אם הוקש 2 (הבא), האינדקס כבר עלה ב-1 בקריאה הקודמת
 
-        # בדיקה אם הגענו לסוף הרשימה
-        if state['index'] >= len(other_calls):
-            state['index'] = 0
-            state['menu'] = 'main'
-            msg = f"t-סיימת את רשימת המספרים חזרה לתפריט הראשי המספר שלך הוא {cli} מחוברים כרגע למערכת {len(other_calls)} מספרים שונים לשמיעת כל המספרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
-            return ym_read("action", msg, 1)
+        if call_index >= len(other_calls):
+            # סיימנו את הרשימה, נחזור לתפריט הראשי
+            return ym_read("action", "t-אין עוד מספרים ברשימה לחזור לתפריט הראשי הקש 0", 1)
 
-        # הצגת המספר הנוכחי
-        current_call = other_calls[state['index']]
+        current_call = other_calls[call_index]
         phone = current_call.get('callerIdNum', 'לא ידוע')
         duration = current_call.get('duration', 0)
         path = current_call.get('path') or "לא ידועה"
-        
+
         msg = f"t-המספר {phone} מחובר {duration} שניות ונמצא בשלוחה {path} לניתוק הקש 1 לשמיעת המספר הבא הקש 2 ליציאה הקש 0"
-        return ym_read("action", msg, 1)
+        
+        # שומרים את האינדקס הבא (call_index+1) כדי שנדע להציג אותו אם יקיש 2
+        return ym_response(f"read={msg}=action,1,12,1,Digits,{call_index+1}")
 
     return ym_say_and_go_back("t-שגיאה לא ידועה")
 
