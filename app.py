@@ -351,8 +351,6 @@ def create_record():
     say_record_menu = request.values.get('say_record_menu')
     say_record_number = request.values.get('say_record_number')
     
-    email_send = request.values.get('email_send')
-    email_address = request.values.get('email_address')
     list_tzintuk = request.values.get('list_tzintuk')
     hangup_insert_file = request.values.get('hangup_insert_file')
     set_record_name = request.values.get('set_record_name')
@@ -417,19 +415,7 @@ def create_record():
 
     # ========== אופציונליים ==========
 
-    # 6. שליחה למייל - שימוש ב-EnglishKeyboard עם הוראות ברורות
-    if email_send is None:
-        return ym_read("email_send", "t-האם ברצונך שההקלטה תשלח למייל שלכם? להגדרה הקישו 1 אחרת הקישו 0", 1)
-    
-    email_send_value, email_address_value = "", ""
-    if email_send == "1":
-        if not email_address:
-            # הוראה מפורשת: להקיש 2 עבור A, 22 עבור B, 0000 עבור @, 1 עבור נקודה
-            return ym_read("email_address", "t-אנא הקישו את כתובת המייל באנגלית להקלדת אותיות הקישו את הספרה המתאימה פעמיים או שלוש פעמים עבור שטרודל הקישו 0000 עבור נקודה הקישו 1 ובסיום הקישו סולמית", 50, "EnglishKeyboard")
-        email_send_value = "yes"
-        email_address_value = email_address.strip()
-
-    # 7. צינתוק
+    # 6. צינתוק
     if list_tzintuk is None:
         return ym_read("list_tzintuk", "t-האם ברצונך לשלוח צינתוק על הקלטה חדשה? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -439,7 +425,7 @@ def create_record():
             return ym_read("list_tzintuk_name", "t-הקישו את שם רשימת הצינתוקים ובסיום סולמית", 20, "Any")
         tzintuk_value = request.values.get('list_tzintuk_name').strip()
 
-    # 8. שמירה בניתוק
+    # 7. שמירה בניתוק
     if hangup_insert_file is None:
         return ym_read("hangup_insert_file", "t-האם ברצונך לשמור את ההקלטה גם אם המשתמש מנתק? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -447,7 +433,7 @@ def create_record():
     if hangup_insert_file == "1":
         hangup_insert_value = "yes"
 
-    # 9. בחירת שם קובץ
+    # 8. בחירת שם קובץ
     if set_record_name is None:
         return ym_read("set_record_name", "t-האם ברצונך לאפשר למקליט לבחור שם קובץ? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -455,7 +441,7 @@ def create_record():
     if set_record_name == "1":
         set_record_name_value = "yes"
 
-    # 10. הקלטת כותרת
+    # 9. הקלטת כותרת
     if record_title is None:
         return ym_read("record_title", "t-האם ברצונך להקליט כותרת לפני ההקלטה? תמיד הקישו 1 עם תפריט הקישו 2 אחרת הקישו 0", 1)
     
@@ -465,7 +451,7 @@ def create_record():
     elif record_title == "2":
         record_title_value = "tfr"
 
-    # 11. עצירה בכל מקש
+    # 10. עצירה בכל מקש
     if record_stop_any_key is None:
         return ym_read("record_stop_any_key", "t-האם ברצונך לעצור את ההקלטה בכל מקש? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -473,7 +459,7 @@ def create_record():
     if record_stop_any_key == "1":
         stop_any_key_value = "yes"
 
-    # 12. זיהוי משתמש
+    # 11. זיהוי משתמש
     if enter_id is None:
         return ym_read("enter_id", "t-האם ברצונך להפעיל זיהוי משתמש לפי טלפון? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -481,7 +467,7 @@ def create_record():
     if enter_id == "1":
         enter_id_value = "yes"
 
-    # 13. קישור קשיח
+    # 12. קישור קשיח
     if hard_link is None:
         return ym_read("hard_link", "t-האם ברצונך ליצור קישור קשיח להקלטה? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -489,7 +475,7 @@ def create_record():
     if hard_link == "1":
         hard_link_value = "yes"
 
-    # 14. העתקה לשלוחה נוספת
+    # 13. העתקה לשלוחה נוספת
     if copy_record_link is None:
         return ym_read("copy_record_link", "t-האם ברצונך להעתיק את ההקלטה לשלוחה נוספת? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -525,9 +511,6 @@ def create_record():
         if say_record_number_value == "no":
             lines.append("say_record_number=no")
         
-        if email_send_value:
-            lines.append(f"email_send={email_send_value}")
-            lines.append(f"email_address={email_address_value}")
         if tzintuk_value:
             lines.append(f"list_tzintuk={tzintuk_value}")
             lines.append("record_end_run_tzintuk=yes")
