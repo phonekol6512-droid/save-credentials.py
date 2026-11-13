@@ -84,26 +84,26 @@ def manage_credentials():
     saved_system, saved_password = get_user_credentials(cli)
 
     if saved_system and saved_password and manage_action is None:
-        return ym_read("manage_action", f"t-מספר מערכת {saved_system} שמור בתור המערכת הקבועה שלכם לעדכון המספר של המערכת או להחלפת המערכת  הקש 1 למחיקת מספר המערכת שלכם והסיסמה הקש 2 ליציאה הקש 0", 1)
+        return ym_read("manage_action", f"t-מערכת {saved_system} שמורה להחלפה הקש 1 למחיקה הקש 2 ליציאה הקש 0", 1)
 
     if manage_action == "2":
         delete_user_credentials(cli)
-        return ym_say_and_go_back("t-מספר המערכת שלכם והסיסמה נמחק בהצלחה")
+        return ym_say_and_go_back("t-המערכת נמחקה בהצלחה")
 
     if manage_action == "0":
-        return ym_say_and_go_back("t-הנכם מועברים לתפריט הקודם")
+        return ym_say_and_go_back("t-ללא שינוי")
 
     if not user_system:
-        return ym_read("user_system", "t-הגדרת המערכת הקבועה שלכם, שימו לב מספר המערכת והסיסמה שלכם נשמרים בשרת מאובטח בכל זאת תמיד תוכלו למחוק את הפרטים ולעדכן אותם, הנכם מועברים להגדרת המערכת הקבועה שלכם, אנא הקישו את מספר המערכת שלכם ובסיום הקישו סולמית", 10, "Any")
+        return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10, "Any")
     if not password:
-        return ym_read("password", "t-אנא הקישו את סיסמת המערכת שלכם ובסיום הקישו סולמית", 10, "Any")
+        return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10, "Any")
 
     if 'user_system' in request.values and user_system:
         save_field(cli, 'system', user_system.strip())
     if 'password' in request.values and password:
         save_field(cli, 'password', password.strip())
 
-    return ym_say_and_go_back("t-הפרטים נשמרו בהצלחה מעתה בכל פעם שתגדירו מודול תועברו ישירות רק להקשת מספר השלוחה")
+    return ym_say_and_go_back("t-הפרטים נשמרו בהצלחה")
 
 # ---------- שלוחה 2: יצירת תפריט ----------
 @app.route('/create-menu', methods=['GET', 'POST'])
@@ -543,6 +543,73 @@ def create_record():
             return ym_say_and_go_back("t-השלוחה נוצרה אך התפריט לא נטען")
     except Exception as e:
         logging.exception("שגיאה")
+        return ym_say_and_go_back("t-שגיאה טכנית")
+
+# ---------- שלוחה 5: יצירת שלוחת ספירת מאזינים ----------
+@app.route('/create-listeners-count', methods=['GET', 'POST'])
+def create_listeners_count():
+    cli = request.values.get('ApiPhone')
+    user_system = request.values.get('user_system')
+    password = request.values.get('password')
+    
+    saved_system, saved_password = get_user_credentials(cli)
+    if saved_system and saved_password:
+        user_system, password = saved_system, saved_password
+    else:
+        if not user_system:
+            return ym_read("user_system", "t-אנא הקישו את מספר המערכת ובסיום הקישו סולמית", 10, "Any")
+        if not password:
+            return ym_read("password", "t-אנא הקישו את סיסמת המערכת ובסיום הקישו סולמית", 10, "Any")
+
+    extension = request.values.get('extension')
+
+    if not extension:
+        return ym_read("extension", "t-אנא הקישו את מספר השלוחה החדשה לספירת מאזינים ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
+
+    try:
+        clean_ext = extension.strip().replace('*', '/').replace('-', '/').strip('/')
+        if not clean_ext:
+            return ym_say_and_go_back("t-שגיאה השלוחה ריקה")
+
+        token = f"{user_system.strip()}:{password.strip()}"
+
+        # יצירת השלוחה מסוג ספירת שיחות נכנסות
+        r1 = requests.get(
+            f"{YEMOT_API_URL}UpdateExtension", 
+            params={
+                "token": token,
+                "path": f"ivr2:{clean_ext}",
+                "type": "amount_incoming_phone_numbers"
+            }, 
+            timeout=15
+        )
+        logging.info(f"UpdateExtension (amount_incoming_phone_numbers): {r1.status_code} - {r1.text}")
+
+        if not (r1.status_code == 200 and '"responseStatus":"OK"' in r1.text):
+            return ym_say_and_go_back("t-שגיאה ביצירת שלוחת ספירת המאזינים")
+
+        # העלאת קובץ הגדרות עם כותרת (אופציונלי)
+        ext_ini = f"""type=amount_incoming_phone_numbers
+title=ספירת מאזינים
+"""
+        r2 = requests.post(
+            f"{YEMOT_API_URL}UploadTextFile", 
+            params={
+                "token": token, 
+                "what": f"ivr2:/{clean_ext}/ext.ini", 
+                "contents": ext_ini
+            }, 
+            timeout=15
+        )
+        logging.info(f"UploadTextFile (amount_incoming_phone_numbers): {r2.status_code} - {r2.text}")
+
+        if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
+            return ym_say_and_go_back(f"t-שלוחת ספירת המאזינים {clean_ext} נוצרה בהצלחה")
+        else:
+            return ym_say_and_go_back("t-השלוחה נוצרה אך הגדרותיה לא נטענו")
+
+    except Exception as e:
+        logging.exception("שגיאה ביצירת שלוחת ספירת מאזינים")
         return ym_say_and_go_back("t-שגיאה טכנית")
 
 # ---------- הרצת השרת ----------
