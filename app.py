@@ -576,12 +576,19 @@ def active_calls():
             call_id_to_transfer = state.get('current_call_id')
             
             if call_id_to_transfer:
-                # התיקון הקריטי: שימוש ב-set:GOasap=/<ext> להעברת שיחה חיה
-                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"set:GOasap=/{clean_ext}"}, timeout=5)
-                logging.info(f"Transfer {call_id_to_transfer} to /{clean_ext}: {res.text}")
+                # התיקון: שימוש ב-transfer={ext} להעברה חיה
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer={clean_ext}"}, timeout=5)
+                logging.info(f"Transfer {call_id_to_transfer} to {clean_ext}: {res.text}")
                 if '"responseStatus":"OK"' in res.text:
                     just_disconnected.add(call_id_to_transfer)
                     other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
+                else:
+                    # Fallback ל-set:GOasap אם transfer נכשל
+                    res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"set:GOasap=/{clean_ext}"}, timeout=5)
+                    logging.info(f"Fallback set:GOasap {call_id_to_transfer} to /{clean_ext}: {res.text}")
+                    if '"responseStatus":"OK"' in res.text:
+                        just_disconnected.add(call_id_to_transfer)
+                        other_calls = [c for c in other_calls if c.get('id') != call_id_to_transfer]
             
             state['mode'] = 'sub'
             action = "3" # עובר אוטומטית להצגת השיחה הבאה
