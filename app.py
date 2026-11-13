@@ -73,7 +73,7 @@ def ym_read(var_name: str, prompt: str, max_digits=1, input_type="Digits"):
 def ym_say_and_go_back(text: str):
     return ym_response(f"id_list_message={text}")
 
-# ---------- שלוחה 1: ניהול מערכת (החלפה / מחיקה / הגדרה ראשונית) ----------
+# ---------- שלוחה 1: ניהול מערכת ----------
 @app.route('/manage-credentials', methods=['GET', 'POST'])
 def manage_credentials():
     cli = request.values.get('ApiPhone')
@@ -365,22 +365,21 @@ def create_record():
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה החדשה ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
 
-    # 1. מיקום ההקלטה (folder_move) - נוסח מתוקן
+    # 1. מיקום ההקלטה - אם בוחר 0, לא כותבים כלום
     if folder_move_choice is None:
         return ym_read("folder_move_choice", "t-ברירת המחדל של המערכת ההקלטות נשמרות בשלוחה עצמה להמשך כברירת מחדל הקישו 0 להעברת ההקלטה לשלוחה אחרת הקישו 1 לתיבה אישית הקישו 2 לבחירה בזמן הקלטה הקישו 3", 1)
 
-    if folder_move_choice == "0":
-        folder_move_value = "this_folder"
-    elif folder_move_choice == "1":
+    folder_move_value = ""
+    if folder_move_choice == "1":
         if not folder_move_path:
             return ym_read("folder_move_path", "t-הקישו את מספר שלוחת היעד ובסיום סולמית", 10)
         folder_move_value = f"/{folder_move_path.strip().replace('*', '/')}"
     elif folder_move_choice == "2":
         folder_move_value = "id"
-    else:
+    elif folder_move_choice == "3":
         folder_move_value = "tfr"
 
-    # 2. ניתוב בסיום (record_end_goto) - נוסח מתוקן
+    # 2. ניתוב בסיום - אם בוחר 0, לא כותבים כלום
     if record_end_goto is None:
         return ym_read("record_end_goto", "t-ברירת המחדל של המערכת בסיום ההקלטה חוזרת לתפריט הקודם להמשך כברירת מחדל הקישו 0 להעברה לשלוחה אחרת בסיום ההקלטה הקישו 1", 1)
     
@@ -390,7 +389,7 @@ def create_record():
             return ym_read("record_end_goto_path", "t-הקישו את שלוחת היעד בסיום ובסיום סולמית", 10)
         end_goto_value = f"/{request.values.get('record_end_goto_path').strip().replace('*', '/')}"
 
-    # 3. ניתוב בביטול (record_cancel_goto) - נוסח מתוקן
+    # 3. ניתוב בביטול - אם בוחר 0, לא כותבים כלום
     if record_cancel_goto is None:
         return ym_read("record_cancel_goto", "t-ברירת המחדל של המערכת בביטול ההקלטה חוזרת לתפריט הקודם להמשך כברירת מחדל הקישו 0 להעברה לשלוחה אחרת בביטול הקישו 1", 1)
     
@@ -400,7 +399,7 @@ def create_record():
             return ym_read("record_cancel_goto_path", "t-הקישו את שלוחת הביטול ובסיום סולמית", 10)
         cancel_goto_value = f"/{request.values.get('record_cancel_goto_path').strip().replace('*', '/')}"
 
-    # 4. תפריט אישור (say_record_menu) - נוסח מתוקן
+    # 4. תפריט אישור - אם בוחר 0, לא כותבים כלום
     if say_record_menu is None:
         return ym_read("say_record_menu", "t-ברירת המחדל של המערכת משמיעה תפריט אישור ביטול והקלטה מחדש בסיום ההקלטה להמשך כברירת מחדל הקישו 0 לביטול התפריט הקישו 1", 1)
     
@@ -408,7 +407,7 @@ def create_record():
     if say_record_menu == "1":
         say_record_menu_value = "no"
 
-    # 5. השמעת מספר הקלטה (say_record_number) - נוסח מתוקן
+    # 5. השמעת מספר הקלטה - אם בוחר 0, לא כותבים כלום
     if say_record_number is None:
         return ym_read("say_record_number", "t-ברירת המחדל של המערכת משמיעה את מספר ההקלטה לפני ההשמעה להמשך כברירת מחדל הקישו 0 לביטול השמעת המספר הקישו 1", 1)
     
@@ -418,14 +417,15 @@ def create_record():
 
     # ========== אופציונליים ==========
 
-    # 6. שליחה למייל
+    # 6. שליחה למייל - שימוש ב-EnglishKeyboard עם הוראות ברורות
     if email_send is None:
         return ym_read("email_send", "t-האם ברצונך שההקלטה תשלח למייל שלכם? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
     email_send_value, email_address_value = "", ""
     if email_send == "1":
         if not email_address:
-            return ym_read("email_address", "t-אנא הקישו את כתובת המייל באנגלית ובסיום הקישו סולמית", 50, "EnglishKeyboard")
+            # הוראה מפורשת: להקיש 2 עבור A, 22 עבור B, 0000 עבור @, 1 עבור נקודה
+            return ym_read("email_address", "t-אנא הקישו את כתובת המייל באנגלית להקלדת אותיות הקישו את הספרה המתאימה פעמיים או שלוש פעמים עבור שטרודל הקישו 0000 עבור נקודה הקישו 1 ובסיום הקישו סולמית", 50, "EnglishKeyboard")
         email_send_value = "yes"
         email_address_value = email_address.strip()
 
@@ -507,8 +507,12 @@ def create_record():
 
         token = f"{user_system.strip()}:{password.strip()}"
         
-        lines = ["type=record", "title=שלוחת הקלטה נבנה באמצעות מגדיר פון", f"folder_move={folder_move_value}"]
+        lines = ["type=record", "title=שלוחת הקלטה נבנה באמצעות מגדיר פון"]
         
+        # מיקום ההקלטה: אם בחר 0 (ברירת מחדל), לא כותבים כלום
+        if folder_move_value:
+            lines.append(f"folder_move={folder_move_value}")
+            
         if end_goto_value:
             lines.append(f"record_end_goto={end_goto_value}")
             
