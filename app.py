@@ -363,7 +363,6 @@ def create_record():
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה החדשה ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
 
-    # 1. מיקום ההקלטה - אם בוחר 0, לא כותבים כלום
     if folder_move_choice is None:
         return ym_read("folder_move_choice", "t-ברירת המחדל של המערכת ההקלטות נשמרות בשלוחה עצמה להמשך כברירת מחדל הקישו 0 להעברת ההקלטה לשלוחה אחרת הקישו 1 לתיבה אישית הקישו 2 לבחירה בזמן הקלטה הקישו 3", 1)
 
@@ -377,7 +376,6 @@ def create_record():
     elif folder_move_choice == "3":
         folder_move_value = "tfr"
 
-    # 2. ניתוב בסיום - אם בוחר 0, לא כותבים כלום
     if record_end_goto is None:
         return ym_read("record_end_goto", "t-ברירת המחדל של המערכת בסיום ההקלטה חוזרת לתפריט הקודם להמשך כברירת מחדל הקישו 0 להעברה לשלוחה אחרת בסיום ההקלטה הקישו 1", 1)
     
@@ -387,7 +385,6 @@ def create_record():
             return ym_read("record_end_goto_path", "t-הקישו את שלוחת היעד בסיום ובסיום סולמית", 10)
         end_goto_value = f"/{request.values.get('record_end_goto_path').strip().replace('*', '/')}"
 
-    # 3. ניתוב בביטול - אם בוחר 0, לא כותבים כלום
     if record_cancel_goto is None:
         return ym_read("record_cancel_goto", "t-ברירת המחדל של המערכת בביטול ההקלטה חוזרת לתפריט הקודם להמשך כברירת מחדל הקישו 0 להעברה לשלוחה אחרת בביטול הקישו 1", 1)
     
@@ -397,7 +394,6 @@ def create_record():
             return ym_read("record_cancel_goto_path", "t-הקישו את שלוחת הביטול ובסיום סולמית", 10)
         cancel_goto_value = f"/{request.values.get('record_cancel_goto_path').strip().replace('*', '/')}"
 
-    # 4. תפריט אישור - אם בוחר 0, לא כותבים כלום
     if say_record_menu is None:
         return ym_read("say_record_menu", "t-ברירת המחדל של המערכת משמיעה תפריט אישור ביטול והקלטה מחדש בסיום ההקלטה להמשך כברירת מחדל הקישו 0 לביטול התפריט הקישו 1", 1)
     
@@ -405,7 +401,6 @@ def create_record():
     if say_record_menu == "1":
         say_record_menu_value = "no"
 
-    # 5. השמעת מספר הקלטה - אם בוחר 0, לא כותבים כלום
     if say_record_number is None:
         return ym_read("say_record_number", "t-ברירת המחדל של המערכת משמיעה את מספר ההקלטה לפני ההשמעה להמשך כברירת מחדל הקישו 0 לביטול השמעת המספר הקישו 1", 1)
     
@@ -413,9 +408,6 @@ def create_record():
     if say_record_number == "1":
         say_record_number_value = "no"
 
-    # ========== אופציונליים ==========
-
-    # 6. צינתוק
     if list_tzintuk is None:
         return ym_read("list_tzintuk", "t-האם ברצונך לשלוח צינתוק על הקלטה חדשה? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -425,7 +417,6 @@ def create_record():
             return ym_read("list_tzintuk_name", "t-הקישו את שם רשימת הצינתוקים ובסיום סולמית", 20, "Any")
         tzintuk_value = request.values.get('list_tzintuk_name').strip()
 
-    # 7. שמירה בניתוק
     if hangup_insert_file is None:
         return ym_read("hangup_insert_file", "t-האם ברצונך לשמור את ההקלטה גם אם המשתמש מנתק? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -433,7 +424,6 @@ def create_record():
     if hangup_insert_file == "1":
         hangup_insert_value = "yes"
 
-    # 8. בחירת שם קובץ
     if set_record_name is None:
         return ym_read("set_record_name", "t-האם ברצונך לאפשר למקליט לבחור שם קובץ? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -441,7 +431,6 @@ def create_record():
     if set_record_name == "1":
         set_record_name_value = "yes"
 
-    # 9. הקלטת כותרת
     if record_title is None:
         return ym_read("record_title", "t-האם ברצונך להקליט כותרת לפני ההקלטה? תמיד הקישו 1 עם תפריט הקישו 2 אחרת הקישו 0", 1)
     
@@ -451,7 +440,6 @@ def create_record():
     elif record_title == "2":
         record_title_value = "tfr"
 
-    # 10. עצירה בכל מקש
     if record_stop_any_key is None:
         return ym_read("record_stop_any_key", "t-האם ברצונך לעצור את ההקלטה בכל מקש? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -459,7 +447,6 @@ def create_record():
     if record_stop_any_key == "1":
         stop_any_key_value = "yes"
 
-    # 11. זיהוי משתמש
     if enter_id is None:
         return ym_read("enter_id", "t-האם ברצונך להפעיל זיהוי משתמש לפי טלפון? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -467,7 +454,6 @@ def create_record():
     if enter_id == "1":
         enter_id_value = "yes"
 
-    # 12. קישור קשיח
     if hard_link is None:
         return ym_read("hard_link", "t-האם ברצונך ליצור קישור קשיח להקלטה? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -475,7 +461,6 @@ def create_record():
     if hard_link == "1":
         hard_link_value = "yes"
 
-    # 13. העתקה לשלוחה נוספת
     if copy_record_link is None:
         return ym_read("copy_record_link", "t-האם ברצונך להעתיק את ההקלטה לשלוחה נוספת? להגדרה הקישו 1 אחרת הקישו 0", 1)
     
@@ -485,7 +470,6 @@ def create_record():
             return ym_read("copy_record_link_path", "t-הקישו את שלוחת ההעתקה ובסיום סולמית", 10)
         copy_link_value = f"/{request.values.get('copy_record_link_path').strip().replace('*', '/')}"
 
-    # ===================== יצירת השלוחה =====================
     try:
         clean_ext = extension.strip().replace('*', '/').replace('-', '/').strip('/')
         if not clean_ext:
@@ -495,7 +479,6 @@ def create_record():
         
         lines = ["type=record", "title=שלוחת הקלטה נבנה באמצעות מגדיר פון"]
         
-        # מיקום ההקלטה: אם בחר 0 (ברירת מחדל), לא כותבים כלום
         if folder_move_value:
             lines.append(f"folder_move={folder_move_value}")
             
@@ -545,9 +528,9 @@ def create_record():
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
 
-# ---------- שלוחה 5: יצירת שלוחת ספירת מאזינים ----------
-@app.route('/create-listeners-count', methods=['GET', 'POST'])
-def create_listeners_count():
+# ---------- שלוחה 5: יצירת שלוחה לצפייה וניהול שיחות פעילות ----------
+@app.route('/create-active-calls', methods=['GET', 'POST'])
+def create_active_calls():
     cli = request.values.get('ApiPhone')
     user_system = request.values.get('user_system')
     password = request.values.get('password')
@@ -564,7 +547,7 @@ def create_listeners_count():
     extension = request.values.get('extension')
 
     if not extension:
-        return ym_read("extension", "t-אנא הקישו את מספר השלוחה החדשה לספירת מאזינים ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
+        return ym_read("extension", "t-אנא הקישו את מספר השלוחה החדשה לניהול שיחות פעילות ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
 
     try:
         clean_ext = extension.strip().replace('*', '/').replace('-', '/').strip('/')
@@ -572,26 +555,28 @@ def create_listeners_count():
             return ym_say_and_go_back("t-שגיאה השלוחה ריקה")
 
         token = f"{user_system.strip()}:{password.strip()}"
+        base_url = request.url_root.rstrip('/')
+        api_link = f"{base_url}/system-status-handler"
 
-        # יצירת השלוחה מסוג ספירת שיחות נכנסות
+        ext_ini = f"""type=api
+api_link={api_link}
+api_add_data=ApiPhone
+"""
+
         r1 = requests.get(
             f"{YEMOT_API_URL}UpdateExtension", 
             params={
                 "token": token,
                 "path": f"ivr2:{clean_ext}",
-                "type": "amount_incoming_phone_numbers"
+                "type": "api"
             }, 
             timeout=15
         )
-        logging.info(f"UpdateExtension (amount_incoming_phone_numbers): {r1.status_code} - {r1.text}")
+        logging.info(f"UpdateExtension (active calls): {r1.status_code} - {r1.text}")
 
         if not (r1.status_code == 200 and '"responseStatus":"OK"' in r1.text):
-            return ym_say_and_go_back("t-שגיאה ביצירת שלוחת ספירת המאזינים")
+            return ym_say_and_go_back("t-שגיאה ביצירת שלוחת צפייה בשיחות")
 
-        # העלאת קובץ הגדרות עם כותרת (אופציונלי)
-        ext_ini = f"""type=amount_incoming_phone_numbers
-title=ספירת מאזינים
-"""
         r2 = requests.post(
             f"{YEMOT_API_URL}UploadTextFile", 
             params={
@@ -601,16 +586,86 @@ title=ספירת מאזינים
             }, 
             timeout=15
         )
-        logging.info(f"UploadTextFile (amount_incoming_phone_numbers): {r2.status_code} - {r2.text}")
+        logging.info(f"UploadTextFile (active calls): {r2.status_code} - {r2.text}")
 
         if r2.status_code == 200 and '"responseStatus":"OK"' in r2.text:
-            return ym_say_and_go_back(f"t-שלוחת ספירת המאזינים {clean_ext} נוצרה בהצלחה")
+            return ym_say_and_go_back(f"t-שלוחת ניהול השיחות הפעילות {clean_ext} נוצרה בהצלחה")
         else:
             return ym_say_and_go_back("t-השלוחה נוצרה אך הגדרותיה לא נטענו")
 
     except Exception as e:
-        logging.exception("שגיאה ביצירת שלוחת ספירת מאזינים")
+        logging.exception("שגיאה ביצירת שלוחת ניהול שיחות")
         return ym_say_and_go_back("t-שגיאה טכנית")
+
+
+# ---------- נתיב: הצגת שיחות פעילות וניתוקן ----------
+@app.route('/system-status-handler', methods=['GET', 'POST'])
+def system_status_handler():
+    cli = request.values.get('ApiPhone')
+    action = request.values.get('action')
+    
+    saved_system, saved_password = get_user_credentials(cli)
+    if not saved_system or not saved_password:
+        return ym_say_and_go_back("t-לא נמצאו פרטי מערכת שמורים")
+
+    token = f"{saved_system}:{saved_password}"
+
+    # שליפת השיחות הפעילות
+    try:
+        r = requests.get(f"{YEMOT_API_URL}GetIncomingCalls", params={"token": token}, timeout=10)
+        if r.status_code != 200:
+            return ym_say_and_go_back("t-שגיאה בשליפת השיחות הפעילות")
+        
+        data = r.json()
+        if data.get('responseStatus') != 'OK':
+            return ym_say_and_go_back("t-שגיאה בשליפת השיחות הפעילות")
+        
+        calls = data.get('calls', [])
+    except Exception as e:
+        logging.exception("שגיאה ב-GetIncomingCalls")
+        return ym_say_and_go_back("t-שגיאה טכנית בשליפת השיחות")
+
+    if not calls:
+        return ym_say_and_go_back("t-אין שיחות פעילות כרגע במערכת")
+
+    # אם התקבלה בקשת ניתוק (המשתמש הקיש 1)
+    if action == "1":
+        for call in calls:
+            call_id = call.get('callId')
+            if call_id:
+                requests.get(
+                    f"{YEMOT_API_URL}CallAction",
+                    params={
+                        "token": token,
+                        "ids": call_id,
+                        "action": "set:GOasap=hangup"
+                    },
+                    timeout=5
+                )
+        return ym_say_and_go_back("t-כל השיחות הפעילות נותקו בהצלחה")
+
+    if action == "0":
+        return ym_say_and_go_back("t-ללא שינוי")
+
+    # אם זו הפעם הראשונה, בונים את ההודעה עם מספרי הטלפון
+    # מוגבל ל-5 מספרים כדי לא להציף את ההודעה
+    phone_list = []
+    for i, call in enumerate(calls[:5], 1):
+        phone = call.get('phone', 'לא ידוע')
+        phone_list.append(f"שיחה {i}: {phone}")
+    
+    if len(calls) > 5:
+        phone_list.append(f"ועוד {len(calls) - 5} שיחות נוספות")
+        
+    phones_text = ". ".join(phone_list)
+    count = len(calls)
+    
+    # שאלת המשך: לנתק או לא
+    return ym_read(
+        "action",
+        f"t-כרגע יש {count} שיחות פעילות. {phones_text}. לניתוק כל השיחות הקש 1, לחזור הקש 0",
+        1
+    )
 
 # ---------- הרצת השרת ----------
 if __name__ == '__main__':
