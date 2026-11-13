@@ -576,8 +576,8 @@ def active_calls():
             call_id_to_transfer = state.get('current_call_id')
             
             if call_id_to_transfer:
-                # התיקון: שליחת פקודת transfer עם סלאש לפני מספר השלוחה
-                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"transfer=/{clean_ext}"}, timeout=5)
+                # התיקון הקריטי: שימוש ב-set:GOasap=/<ext> להעברת שיחה חיה
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_transfer, "action": f"set:GOasap=/{clean_ext}"}, timeout=5)
                 logging.info(f"Transfer {call_id_to_transfer} to /{clean_ext}: {res.text}")
                 if '"responseStatus":"OK"' in res.text:
                     just_disconnected.add(call_id_to_transfer)
