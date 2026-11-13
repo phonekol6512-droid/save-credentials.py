@@ -277,7 +277,6 @@ def create_playfile():
 
         token = f"{user_system.strip()}:{password.strip()}"
         
-        # תיקון: אם בחר 0, לא כותבים כלום (ריק)
         say_length_value = "say_length=yes" if say_length == "1" else "playfile_say_length_if=5" if say_length == "2" else ""
         beep_line = "play_beep=no" if play_beep == "1" else ""
         order_line = "start=min" if play_order == "1" else ""
@@ -366,95 +365,141 @@ def create_record():
     if not extension:
         return ym_read("extension", "t-אנא הקישו את מספר השלוחה החדשה ובסיום הקישו סולמית לשלוחה פנימית הקישו כוכבית בין שלוחה לשלוחה", 10)
 
+    # 1. מיקום ההקלטה (folder_move) - נוסח מתוקן
     if folder_move_choice is None:
-        return ym_read("folder_move_choice", "t-לאן להעביר את ההקלטה? לשלוחה מסוימת הקישו 1 לשהייה כאן הקישו 2 לתיבה אישית הקישו 3 לבחירה בזמן הקלטה הקישו 4", 1)
+        return ym_read("folder_move_choice", "t-ברירת המחדל של המערכת ההקלטות נשמרות בשלוחה עצמה להמשך כברירת מחדל הקישו 0 להעברת ההקלטה לשלוחה אחרת הקישו 1 לתיבה אישית הקישו 2 לבחירה בזמן הקלטה הקישו 3", 1)
 
-    if folder_move_choice == "1":
+    if folder_move_choice == "0":
+        folder_move_value = "this_folder"
+    elif folder_move_choice == "1":
         if not folder_move_path:
             return ym_read("folder_move_path", "t-הקישו את מספר שלוחת היעד ובסיום סולמית", 10)
         folder_move_value = f"/{folder_move_path.strip().replace('*', '/')}"
     elif folder_move_choice == "2":
-        folder_move_value = "this_folder"
-    elif folder_move_choice == "3":
         folder_move_value = "id"
     else:
         folder_move_value = "tfr"
 
+    # 2. ניתוב בסיום (record_end_goto) - נוסח מתוקן
     if record_end_goto is None:
-        return ym_read("record_end_goto", "t-לאן לעבור בסיום ההקלטה? לחזור לתפריט הקודם הקש 0 לעבור לשלוחה אחרת הקש 1", 1)
+        return ym_read("record_end_goto", "t-ברירת המחדל של המערכת בסיום ההקלטה חוזרת לתפריט הקודם להמשך כברירת מחדל הקישו 0 להעברה לשלוחה אחרת בסיום ההקלטה הקישו 1", 1)
+    
     end_goto_value = ""
     if record_end_goto == "1":
         if not request.values.get('record_end_goto_path'):
             return ym_read("record_end_goto_path", "t-הקישו את שלוחת היעד בסיום ובסיום סולמית", 10)
         end_goto_value = f"/{request.values.get('record_end_goto_path').strip().replace('*', '/')}"
 
+    # 3. ניתוב בביטול (record_cancel_goto) - נוסח מתוקן
     if record_cancel_goto is None:
-        return ym_read("record_cancel_goto", "t-ברירת המחדל של המערכת בביטול ההקלטה חוזר לתפריט הקודם להמשך ללא שינוי הקישו 0 להגדרה שבביטול ההקלטה יעבור לשלוחה מסוימת הקישו 1", 1)
+        return ym_read("record_cancel_goto", "t-ברירת המחדל של המערכת בביטול ההקלטה חוזרת לתפריט הקודם להמשך כברירת מחדל הקישו 0 להעברה לשלוחה אחרת בביטול הקישו 1", 1)
+    
     cancel_goto_value = ""
     if record_cancel_goto == "1":
         if not request.values.get('record_cancel_goto_path'):
             return ym_read("record_cancel_goto_path", "t-הקישו את שלוחת הביטול ובסיום סולמית", 10)
         cancel_goto_value = f"/{request.values.get('record_cancel_goto_path').strip().replace('*', '/')}"
 
+    # 4. תפריט אישור (say_record_menu) - נוסח מתוקן
     if say_record_menu is None:
-        return ym_read("say_record_menu", "t-האם להשמיע תפריט אישור וביטול בסיום ההקלטה? להשאיר כברירת מחדל הקש 0 להשבית את התפריט הקש 1", 1)
-    # תיקון: אם בחר 0 (ברירת מחדל), לא כותבים כלום
-    say_record_menu_value = "no" if say_record_menu == "1" else ""
+        return ym_read("say_record_menu", "t-ברירת המחדל של המערכת משמיעה תפריט אישור ביטול והקלטה מחדש בסיום ההקלטה להמשך כברירת מחדל הקישו 0 לביטול התפריט הקישו 1", 1)
+    
+    say_record_menu_value = ""
+    if say_record_menu == "1":
+        say_record_menu_value = "no"
 
+    # 5. השמעת מספר הקלטה (say_record_number) - נוסח מתוקן
     if say_record_number is None:
-        return ym_read("say_record_number", "t-ברירת המחדל של המערכת משמיע את מספר ההקלטה לפני ההשמעה להמשך ללא שינוי הקישו 0 להגדרה שלא להשמיע את מספר ההקלטה הקישו 1", 1)
-    # תיקון: אם בחר 0 (ברירת מחדל), לא כותבים כלום
-    say_record_number_value = "no" if say_record_number == "1" else ""
+        return ym_read("say_record_number", "t-ברירת המחדל של המערכת משמיעה את מספר ההקלטה לפני ההשמעה להמשך כברירת מחדל הקישו 0 לביטול השמעת המספר הקישו 1", 1)
+    
+    say_record_number_value = ""
+    if say_record_number == "1":
+        say_record_number_value = "no"
 
+    # ========== אופציונליים ==========
+
+    # 6. שליחה למייל
     if email_send is None:
         return ym_read("email_send", "t-האם ברצונך שההקלטה תשלח למייל שלכם? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    
     email_send_value, email_address_value = "", ""
     if email_send == "1":
         if not email_address:
-            return ym_read("email_address", "t-אנא הקישו את כתובת המייל באנגלית ובסיום הקישו סולמית", 50, "EmailKeyboard")
+            return ym_read("email_address", "t-אנא הקישו את כתובת המייל באנגלית ובסיום הקישו סולמית", 50, "EnglishKeyboard")
         email_send_value = "yes"
         email_address_value = email_address.strip()
 
+    # 7. צינתוק
     if list_tzintuk is None:
         return ym_read("list_tzintuk", "t-האם ברצונך לשלוח צינתוק על הקלטה חדשה? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    
     tzintuk_value = ""
     if list_tzintuk == "1":
         if not request.values.get('list_tzintuk_name'):
             return ym_read("list_tzintuk_name", "t-הקישו את שם רשימת הצינתוקים ובסיום סולמית", 20, "Any")
         tzintuk_value = request.values.get('list_tzintuk_name').strip()
 
+    # 8. שמירה בניתוק
     if hangup_insert_file is None:
         return ym_read("hangup_insert_file", "t-האם ברצונך לשמור את ההקלטה גם אם המשתמש מנתק? להגדרה הקישו 1 אחרת הקישו 0", 1)
-    hangup_insert_value = "yes" if hangup_insert_file == "1" else ""
+    
+    hangup_insert_value = ""
+    if hangup_insert_file == "1":
+        hangup_insert_value = "yes"
 
+    # 9. בחירת שם קובץ
     if set_record_name is None:
         return ym_read("set_record_name", "t-האם ברצונך לאפשר למקליט לבחור שם קובץ? להגדרה הקישו 1 אחרת הקישו 0", 1)
-    set_record_name_value = "yes" if set_record_name == "1" else ""
+    
+    set_record_name_value = ""
+    if set_record_name == "1":
+        set_record_name_value = "yes"
 
+    # 10. הקלטת כותרת
     if record_title is None:
         return ym_read("record_title", "t-האם ברצונך להקליט כותרת לפני ההקלטה? תמיד הקישו 1 עם תפריט הקישו 2 אחרת הקישו 0", 1)
-    record_title_value = "yes" if record_title == "1" else "tfr" if record_title == "2" else ""
+    
+    record_title_value = ""
+    if record_title == "1":
+        record_title_value = "yes"
+    elif record_title == "2":
+        record_title_value = "tfr"
 
+    # 11. עצירה בכל מקש
     if record_stop_any_key is None:
         return ym_read("record_stop_any_key", "t-האם ברצונך לעצור את ההקלטה בכל מקש? להגדרה הקישו 1 אחרת הקישו 0", 1)
-    stop_any_key_value = "yes" if record_stop_any_key == "1" else ""
+    
+    stop_any_key_value = ""
+    if record_stop_any_key == "1":
+        stop_any_key_value = "yes"
 
+    # 12. זיהוי משתמש
     if enter_id is None:
         return ym_read("enter_id", "t-האם ברצונך להפעיל זיהוי משתמש לפי טלפון? להגדרה הקישו 1 אחרת הקישו 0", 1)
-    enter_id_value = "yes" if enter_id == "1" else ""
+    
+    enter_id_value = ""
+    if enter_id == "1":
+        enter_id_value = "yes"
 
+    # 13. קישור קשיח
     if hard_link is None:
         return ym_read("hard_link", "t-האם ברצונך ליצור קישור קשיח להקלטה? להגדרה הקישו 1 אחרת הקישו 0", 1)
-    hard_link_value = "yes" if hard_link == "1" else ""
+    
+    hard_link_value = ""
+    if hard_link == "1":
+        hard_link_value = "yes"
 
+    # 14. העתקה לשלוחה נוספת
     if copy_record_link is None:
         return ym_read("copy_record_link", "t-האם ברצונך להעתיק את ההקלטה לשלוחה נוספת? להגדרה הקישו 1 אחרת הקישו 0", 1)
+    
     copy_link_value = ""
     if copy_record_link == "1":
         if not request.values.get('copy_record_link_path'):
             return ym_read("copy_record_link_path", "t-הקישו את שלוחת ההעתקה ובסיום סולמית", 10)
         copy_link_value = f"/{request.values.get('copy_record_link_path').strip().replace('*', '/')}"
 
+    # ===================== יצירת השלוחה =====================
     try:
         clean_ext = extension.strip().replace('*', '/').replace('-', '/').strip('/')
         if not clean_ext:
@@ -464,18 +509,15 @@ def create_record():
         
         lines = ["type=record", "title=שלוחת הקלטה נבנה באמצעות מגדיר פון", f"folder_move={folder_move_value}"]
         
-        # תיקון: אם end_goto_value ריק (בחר 0), לא כותבים כלום
         if end_goto_value:
             lines.append(f"record_end_goto={end_goto_value}")
             
         if cancel_goto_value: 
             lines.append(f"record_cancel_goto={cancel_goto_value}")
         
-        # תיקון: רק אם המשתמש בחר להשבית (1), כותבים say_record_menu=no
         if say_record_menu_value == "no":
             lines.append("say_record_menu=no")
             
-        # תיקון: רק אם המשתמש בחר להשבית (1), כותבים say_record_number=no
         if say_record_number_value == "no":
             lines.append("say_record_number=no")
         
@@ -485,15 +527,21 @@ def create_record():
         if tzintuk_value:
             lines.append(f"list_tzintuk={tzintuk_value}")
             lines.append("record_end_run_tzintuk=yes")
-        if hangup_insert_value: lines.append(f"hangup_insert_file={hangup_insert_value}")
-        if set_record_name_value: lines.append(f"set_record_name={set_record_name_value}")
-        if record_title_value: lines.append(f"record_title={record_title_value}")
-        if stop_any_key_value: lines.append(f"record_stop_any_key={stop_any_key_value}")
+        if hangup_insert_value: 
+            lines.append(f"hangup_insert_file={hangup_insert_value}")
+        if set_record_name_value: 
+            lines.append(f"set_record_name={set_record_name_value}")
+        if record_title_value: 
+            lines.append(f"record_title={record_title_value}")
+        if stop_any_key_value: 
+            lines.append(f"record_stop_any_key={stop_any_key_value}")
         if enter_id_value:
             lines.append(f"enter_id={enter_id_value}")
             lines.append("enter_id_type=phone")
-        if hard_link_value: lines.append(f"hard_link={hard_link_value}")
-        if copy_link_value: lines.append(f"copy_record_link={copy_link_value}")
+        if hard_link_value: 
+            lines.append(f"hard_link={hard_link_value}")
+        if copy_link_value: 
+            lines.append(f"copy_record_link={copy_link_value}")
 
         ext_ini = "\n".join(lines)
 
