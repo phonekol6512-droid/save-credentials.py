@@ -528,8 +528,10 @@ def create_record():
         logging.exception("שגיאה")
         return ym_say_and_go_back("t-שגיאה טכנית")
 
-
 # ---------- שלוחה 5: ניהול שיחות פעילות (השלוחה שלך, לא של המשתמש) ----------
+# מילון לניהול מצב השיחה (האם אנחנו בתפריט הראשי או בתת-תפריט, ומה ה-ID של השיחה המוצגת)
+call_states = {}
+
 @app.route('/active-calls', methods=['GET', 'POST'], strict_slashes=False)
 def active_calls():
     if request.values.get('hangup') == 'yes':
@@ -537,86 +539,108 @@ def active_calls():
 
     cli = request.values.get('ApiPhone')
     
-    # תיקון: שליפת ההקשה האחרונה (העדכנית ביותר) מתוך השרשרת
+    # שליפת ההקשה האחרונה (העדכנית ביותר)
     actions = request.values.getlist('action')
     action = actions[-1] if actions else None
 
+    if cli not in call_states:
+        call_states[cli] = {'mode': 'main', 'current_call_id': None}
+    
+    state = call_states[cli]
+
     saved_system, saved_password = get_user_credentials(cli)
     if not saved_system or not saved_password:
+        call_states[cli] = {'mode': 'main', 'current_call_id': None}
         return ym_say_and_go_back("t-לא נמצאו פרטי מערכת שמורים אנא הגדירו את המערכת בשלוחת הניהול")
 
     token = f"{saved_system}:{saved_password}"
 
     try:
         r = requests.get(f"{YEMOT_API_URL}GetIncomingCalls", params={"token": token}, timeout=10)
-        if r.status_code != 200:
-            return ym_say_and_go_back("t-שגיאה בשליפת השיחות הפעילות")
-        
         data = r.json()
-        if data.get('responseStatus') != 'OK':
-            return ym_say_and_go_back("t-שגיאה בשליפת השיחות הפעילות")
-        
         calls = data.get('calls', [])
     except Exception as e:
         logging.exception("שגיאה ב-GetIncomingCalls")
+        call_states[cli] = {'mode': 'main', 'current_call_id': None}
         return ym_say_and_go_back("t-שגיאה טכנית בשליפת השיחות")
 
     # סינון השיחה של המשתמש עצמו
     other_calls = [c for c in calls if c.get('callerIdNum') != cli]
 
     # ================= תפריט ראשי =================
-    if action is None or action == "menu":
-        count = len(other_calls)
-        if count == 0:
-            return ym_response(f"id_list_message=t-המספר שלך הוא {cli} אין כרגע מספרים אחרים מחוברים למערכת\nend=true")
-        
-        msg = f"t-המספר שלך הוא {cli} מחוברים כרגע למערכת {count} מספרים שונים לשמיעת המספרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
-        return ym_read("action", msg, 1)
-
-    # ================= ניתוק כללי (action=3) =================
-    if action == "3":
-        if not other_calls:
-            return ym_response(f"id_list_message=t-אין מספרים אחרים לנתק\nend=true")
+    if state['mode'] == 'main':
+        if action is None:
+            state['current_call_id'] = None
+            if len(other_calls) == 0:
+                call_states[cli] = {'mode': 'main', 'current_call_id': None}
+                return ym_response(f"id_list_message=t-המספר שלך הוא {cli} אין כרגע מספרים אחרים מחוברים למערכת\nend=true")
             
-        disconnected_count = 0
-        for call in other_calls:
-            call_id = call.get('id')
-            if call_id:
-                requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id, "action": "set:GOasap=hangup"}, timeout=5)
-                disconnected_count += 1
-                
-        return ym_response(f"id_list_message=t-נותקו {disconnected_count} מספרים בהצלחה להתראות\nend=true")
+            msg = f"t-המספר שלך הוא {cli} מחוברים כרגע למערכת {len(other_calls)} מספרים שונים לשמיעת המספרים הקש 1 לניתוק כל המספרים הקש 3 ליציאה הקש 0"
+            return ym_read("action", msg, 1)
 
-    # ================= יציאה (action=0) =================
-    if action == "0":
-        return ym_response("id_list_message=t-להתראות\nend=true")
+        if action == "3":
+            call_states[cli] = {'mode': 'main', 'current_call_id': None}
+            if not other_calls:
+                return ym_response("id_list_message=t-אין מספרים אחרים לנתק\nend=true")
+            for call in other_calls:
+                call_id = call.get('id')
+                if call_id:
+                    requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id, "action": "set:GOasap=hangup"}, timeout=5)
+            return ym_response(f"id_list_message=t-נותקו {len(other_calls)} מספרים בהצלחה\nend=true")
 
-    # ================= תת תפריט - שמיעת מספרים (action=1 או 2) =================
-    if action in ["1", "2"]:
-        # תיקון: מניעת דריסת אינדקסים על ידי שימוש בפרמטר נסתר או פשוט חישוב מחדש
-        # נשתמש בפרמטר call_index אם הוא קיים, אחרת נתחיל מ-0 (אם הוקש 1 בתפריט הראשי)
-        call_indexes = request.values.getlist('call_index')
-        call_index = int(call_indexes[-1]) if call_indexes else 0
+        if action == "0":
+            call_states[cli] = {'mode': 'main', 'current_call_id': None}
+            return ym_response("id_list_message=t-להתראות\nend=true")
 
-        # אם הוקש 1 בתפריט הראשי, מתחילים מהתחלה
-        if action == "1" and call_index == 0:
-            call_index = 0
-        # אם הוקש 2 (הבא), האינדקס כבר עלה ב-1 בקריאה הקודמת
+        if action == "1":
+            state['mode'] = 'sub'
+            action = "2" # מפעיל את הצגת השיחה הראשונה
 
-        if call_index >= len(other_calls):
-            # סיימנו את הרשימה, נחזור לתפריט הראשי
-            return ym_read("action", "t-אין עוד מספרים ברשימה לחזור לתפריט הראשי הקש 0", 1)
+    # ================= תת תפריט =================
+    if state['mode'] == 'sub':
+        if action == "0":
+            call_states[cli] = {'mode': 'main', 'current_call_id': None}
+            return ym_response("id_list_message=t-חזרת לתפריט הראשי\nend=true")
 
-        current_call = other_calls[call_index]
-        phone = current_call.get('callerIdNum', 'לא ידוע')
-        duration = current_call.get('duration', 0)
-        path = current_call.get('path') or "לא ידועה"
+        if action == "1":
+            # ניתוק השיחה הנוכחית
+            call_id_to_disconnect = state.get('current_call_id')
+            if call_id_to_disconnect:
+                res = requests.get(f"{YEMOT_API_URL}CallAction", params={"token": token, "ids": call_id_to_disconnect, "action": "set:GOasap=hangup"}, timeout=5)
+                logging.info(f"Disconnect {call_id_to_disconnect}: {res.text}")
+                # הסרת השיחה מהרשימה המקומית כדי שנוכל לעבור לבאה בתור
+                other_calls = [c for c in other_calls if c.get('id') != call_id_to_disconnect]
+            
+            action = "2" # מפעיל את הצגת השיחה הבאה בתור
 
-        msg = f"t-המספר {phone} מחובר {duration} שניות ונמצא בשלוחה {path} לניתוק הקש 1 לשמיעת המספר הבא הקש 2 ליציאה הקש 0"
-        
-        # שומרים את האינדקס הבא (call_index+1) כדי שנדע להציג אותו אם יקיש 2
-        return ym_response(f"read={msg}=action,1,12,1,Digits,{call_index+1}")
+        if action == "2":
+            # מציאת השיחה הבאה בתור
+            current_id = state.get('current_call_id')
+            next_call = None
+            
+            if current_id:
+                for i, c in enumerate(other_calls):
+                    if c.get('id') == current_id:
+                        if i + 1 < len(other_calls):
+                            next_call = other_calls[i+1]
+                        break
+            
+            if not next_call and other_calls:
+                next_call = other_calls[0]
 
+            if not next_call:
+                call_states[cli] = {'mode': 'main', 'current_call_id': None}
+                return ym_response("id_list_message=t-אין עוד מספרים ברשימה להתראות\nend=true")
+
+            state['current_call_id'] = next_call.get('id')
+            phone = next_call.get('callerIdNum', 'לא ידוע')
+            duration = next_call.get('duration', 0)
+            path = next_call.get('path') or "לא ידועה"
+
+            msg = f"t-המספר {phone} מחובר {duration} שניות ונמצא בשלוחה {path} לניתוק הקש 1 לשמיעת המספר הבא הקש 2 ליציאה הקש 0"
+            return ym_read("action", msg, 1)
+
+    call_states[cli] = {'mode': 'main', 'current_call_id': None}
     return ym_say_and_go_back("t-שגיאה לא ידועה")
 
 # ---------- הרצת השרת ----------
