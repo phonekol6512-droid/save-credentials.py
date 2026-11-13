@@ -67,10 +67,10 @@ def ym_response(content: str):
     res.headers["Content-Type"] = "text/plain; charset=utf-8"
     return res
 
-# התיקון: הוספת no,no כדי לבטל תפריט אישור והשמעת הקלט חוזרת
+# תיקון: חזרה לתחביר הבסיסי של read, עם timeout דינמי בלבד
 def ym_read(var_name: str, prompt: str, max_digits=1, input_type="Digits"):
     timeout = 5 if max_digits == 1 else 15
-    return ym_response(f"read={prompt}={var_name},{max_digits},1,{timeout},{input_type},no,no,yes,yes,yes")
+    return ym_response(f"read={prompt}={var_name},{max_digits},1,{timeout},{input_type}")
 
 def ym_say_and_go_back(text: str):
     return ym_response(f"id_list_message={text}")
